@@ -75,9 +75,13 @@ jobs:
             # so API_BASE_URL is correctly injected as a Docker build arg
             docker compose -p launchpad_demo -f docker-compose.demo.yml --env-file .env.demo build --no-cache --progress=plain web
 
-            # Remove stale container safely before bringing up the new one.
-            # This avoids intermittent "No such container" failures during force-recreate.
-            docker rm -f demo_launchpad_web 2>/dev/null || true
+            # Remove stale web containers safely before bringing up the new one.
+            # Some environments prepend random/hash prefixes to container names,
+            # e.g. "8aac..._demo_launchpad_web", so match by name substring.
+            stale_web_ids=$(docker ps -aq --filter "name=demo_launchpad_web")
+            if [ -n "$stale_web_ids" ]; then
+              docker rm -f $stale_web_ids || true
+            fi
 
             # Start web with the newly built image
             docker compose -p launchpad_demo -f docker-compose.demo.yml --env-file .env.demo up -d web
