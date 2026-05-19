@@ -13,16 +13,19 @@ import '../../services/notification_service.dart';
 import '../../shared/widgets/hub_nav_bar.dart';
 import '../../shared/widgets/no_transition_page_route.dart';
 import '../../shared/widgets/prospect_id_provider.dart';
+import '../../shared/widgets/typewriter_reveal.dart';
 
 class _GuideMessage {
   final bool isUser;
   final String text;
   final bool isMarkdown;
+  final bool animate;
 
   const _GuideMessage({
     required this.isUser,
     required this.text,
     this.isMarkdown = false,
+    this.animate = false,
   });
 }
 
@@ -989,6 +992,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
             isUser: false,
             text: result.replyMarkdown,
             isMarkdown: true,
+            animate: true,
           ),
         );
       });
@@ -1244,9 +1248,11 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
               return Padding(
                 padding: EdgeInsets.only(top: isPrevSame ? 2 : 10, bottom: 1),
                 child: _GuideMessageBubble(
+                  key: ValueKey('guide_${i}_${msg.isUser}_${msg.animate}_${msg.text.hashCode}'),
                   message: msg,
                   isPrevSame: isPrevSame,
                   isNextSame: isNextSame,
+                  enableTypewriter: !msg.isUser && msg.animate,
                 ),
               );
             }),
@@ -1339,9 +1345,11 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
                       return Padding(
                         padding: EdgeInsets.only(top: isPrevSame ? 2 : 10, bottom: 1),
                         child: _GuideMessageBubble(
+                          key: ValueKey('history_${i}_${msg.isUser}_${msg.text.hashCode}'),
                           message: msg,
                           isPrevSame: isPrevSame,
                           isNextSame: isNextSame,
+                          enableTypewriter: false,
                         ),
                       );
                     },
@@ -1450,11 +1458,14 @@ class _GuideMessageBubble extends StatelessWidget {
   final _GuideMessage message;
   final bool isPrevSame;
   final bool isNextSame;
+  final bool enableTypewriter;
 
   const _GuideMessageBubble({
+    super.key,
     required this.message,
     this.isPrevSame = false,
     this.isNextSame = false,
+    this.enableTypewriter = false,
   });
 
   @override
@@ -1485,47 +1496,55 @@ class _GuideMessageBubble extends StatelessWidget {
       const Icon(Icons.person_rounded, size: 16, color: Color(0xFF6B7280)),
     );
 
-    final bubbleContent = message.isMarkdown && !isUser
-        ? MarkdownBody(
-            data: message.text,
-            selectable: true,
-            styleSheet: MarkdownStyleSheet(
-              p: const TextStyle(
+    Widget _buildMessageContent(String data) {
+      return message.isMarkdown && !isUser
+          ? MarkdownBody(
+              data: data,
+              selectable: true,
+              styleSheet: MarkdownStyleSheet(
+                p: const TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF1F2937),
+                  height: 1.5,
+                  fontWeight: FontWeight.w500,
+                ),
+                strong: const TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF1F2937),
+                  fontWeight: FontWeight.w700,
+                ),
+                a: const TextStyle(
+                  color: AppThemeTokens.buttonPrimary,
+                  decoration: TextDecoration.none,
+                  fontWeight: FontWeight.w600,
+                ),
+                listBullet: const TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF1F2937),
+                ),
+                code: const TextStyle(
+                  fontSize: 12,
+                  color: AppThemeTokens.modalHeader,
+                  backgroundColor: Color(0xFFE5E7EB),
+                ),
+              ),
+            )
+          : Text(
+              data,
+              style: TextStyle(
                 fontSize: 14,
-                color: Color(0xFF1F2937),
+                color: isUser ? Colors.white : const Color(0xFF1F2937),
                 height: 1.5,
                 fontWeight: FontWeight.w500,
               ),
-              strong: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF1F2937),
-                fontWeight: FontWeight.w700,
-              ),
-              a: const TextStyle(
-                color: AppThemeTokens.buttonPrimary,
-                decoration: TextDecoration.none,
-                fontWeight: FontWeight.w600,
-              ),
-              listBullet: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF1F2937),
-              ),
-              code: const TextStyle(
-                fontSize: 12,
-                color: AppThemeTokens.modalHeader,
-                backgroundColor: Color(0xFFE5E7EB),
-              ),
-            ),
-          )
-        : Text(
-            message.text,
-            style: TextStyle(
-              fontSize: 14,
-              color: isUser ? Colors.white : const Color(0xFF1F2937),
-              height: 1.5,
-              fontWeight: FontWeight.w500,
-            ),
-          );
+            );
+    }
+
+    final bubbleContent = TypewriterReveal(
+      text: message.text,
+      enabled: enableTypewriter && !isUser,
+      builder: _buildMessageContent,
+    );
 
     // Grouped corner radii — same logic as VoiceBubbleRow
     final bubble = Container(

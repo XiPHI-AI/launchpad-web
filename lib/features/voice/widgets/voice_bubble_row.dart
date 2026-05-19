@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../theme/app_theme.dart';
+import '../../../shared/widgets/typewriter_reveal.dart';
 
 class VoiceBubbleRow extends StatelessWidget {
   final bool isUser;
@@ -9,6 +10,7 @@ class VoiceBubbleRow extends StatelessWidget {
   final String agentInitial;
   final bool isPrevSame;
   final bool isNextSame;
+  final bool enableTypewriter;
 
   const VoiceBubbleRow({
     super.key,
@@ -18,6 +20,7 @@ class VoiceBubbleRow extends StatelessWidget {
     this.agentInitial = 'A',
     this.isPrevSame = false,
     this.isNextSame = false,
+    this.enableTypewriter = false,
   });
 
   @override
@@ -74,15 +77,19 @@ class VoiceBubbleRow extends StatelessWidget {
           bottomRight: Radius.circular(isNextSame && isUser ? 4 : 20),
         ),
       ),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: isUser ? Colors.white : aiTextColor,
-              height: 1.5,
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-              fontStyle: isTentative ? FontStyle.italic : FontStyle.normal,
-            ),
+      child: TypewriterReveal(
+        text: text,
+        enabled: enableTypewriter && !isUser && !isTentative,
+        builder: (visibleText) => Text(
+          visibleText,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: isUser ? Colors.white : aiTextColor,
+                height: 1.5,
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                fontStyle: isTentative ? FontStyle.italic : FontStyle.normal,
+              ),
+        ),
       ),
     );
 

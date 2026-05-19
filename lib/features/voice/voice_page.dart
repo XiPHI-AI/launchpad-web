@@ -990,11 +990,15 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
                                           final isNextSame = nextEntry != null && nextEntry.isUser == entry.isUser;
                                           
                                           return VoiceBubbleRow(
+                                            key: ValueKey(
+                                              'chat_${index}_${entry.isUser}_${entry.isTentative}_${entry.text.hashCode}',
+                                            ),
                                             isUser: entry.isUser,
                                             text: entry.text,
                                             isTentative: entry.isTentative,
                                             isPrevSame: isPrevSame,
                                             isNextSame: isNextSame,
+                                            enableTypewriter: _isChatMode,
                                             agentInitial: _agentName.isNotEmpty
                                                 ? _agentName[0].toUpperCase()
                                                 : 'A',
