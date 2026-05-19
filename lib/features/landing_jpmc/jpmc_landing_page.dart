@@ -172,7 +172,7 @@ class _JpmcLandingPageState extends State<JpmcLandingPage> {
                   padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 16),
                   alignment: Alignment.center,
                   child: Text(
-                    '🔵 Demo mockup — LaunchPad simulation${isMobile ? '' : ' of the J.P. Morgan startups page.'}',
+                    '🔵 Demo mockup — LaunchPad simulation${isMobile ? '' : ' of the J.P. Morgan startups page  by Intelligence Labz'}',
                     style: const TextStyle(
                       fontSize: 12,
                       color: Color(0xD9C8CDFF),
