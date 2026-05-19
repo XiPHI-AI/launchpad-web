@@ -102,6 +102,7 @@ class VoiceTokenResult {
   final String agentId;
   final String stageBucket;
   final String? prospectId;
+  final bool isReturningUser;
   final Map<String, dynamic> dynamicVariables;
 
   VoiceTokenResult({
@@ -109,6 +110,7 @@ class VoiceTokenResult {
     required this.agentId,
     required this.stageBucket,
     this.prospectId,
+    this.isReturningUser = false,
     this.dynamicVariables = const {},
   });
 }
@@ -426,13 +428,15 @@ class ConversationService {
       '${ApiConfig.baseUrl}/conversations/prospect/lookup-email/$email',
     );
     final data = response.data as Map<String, dynamic>;
+    final conversationCount = data['conversation_count'] as int? ?? 0;
     return ProspectInitResult(
       prospectId: data['prospect_id'] as String,
       stageBucket: data['stage_bucket'] as String,
       agentDisplayName:
           data['agent_display_name'] as String? ?? 'your JPMC AI Advisor',
       conversationPhase: data['conversation_phase'] as int? ?? 1,
-      isReturning: true,
+      isReturning:
+          data['is_returning_user'] as bool? ?? (conversationCount > 0),
       email: data['email'] as String?,
       fullName: data['full_name'] as String?,
       phoneNumber: data['phone_number'] as String?,
@@ -458,6 +462,7 @@ class ConversationService {
       '${ApiConfig.baseUrl}/conversations/prospect/$prospectId',
     );
     final data = response.data as Map<String, dynamic>;
+    final conversationCount = data['conversation_count'] as int? ?? 0;
     final classificationData = data['classification'] as Map<String, dynamic>?;
     return ProspectInitResult(
       prospectId: data['prospect_id'] as String,
@@ -465,7 +470,8 @@ class ConversationService {
       agentDisplayName:
           data['agent_display_name'] as String? ?? 'your JPMC AI Advisor',
       conversationPhase: data['conversation_phase'] as int? ?? 1,
-      isReturning: true,
+      isReturning:
+          data['is_returning_user'] as bool? ?? (conversationCount > 0),
       email: data['email'] as String?,
       fullName: data['full_name'] as String?,
       phoneNumber: data['phone_number'] as String?,
@@ -553,12 +559,14 @@ class ConversationService {
   Future<VoiceTokenResult> getVoiceToken(
     String stageBucket, {
     String? prospectId,
+    bool isReconnect = false,
   }) async {
     final response = await _dio.post(
       ApiConfig.voiceTokenEndpoint,
       data: {
         'stage_bucket': stageBucket,
         if (prospectId != null) 'prospect_id': prospectId,
+        if (isReconnect) 'is_reconnect': true,
       },
     );
     final data = response.data as Map<String, dynamic>;
@@ -567,6 +575,7 @@ class ConversationService {
       agentId: data['agent_id'] as String,
       stageBucket: data['stage_bucket'] as String,
       prospectId: data['prospect_id'] as String?,
+      isReturningUser: data['is_returning_user'] as bool? ?? false,
       dynamicVariables:
           (data['dynamic_variables'] as Map<String, dynamic>?) ?? {},
     );

@@ -37,6 +37,26 @@ class _ResponseChipsState {
   static const empty = _ResponseChipsState(show: false, chips: <String>[]);
 }
 
+String _sanitizeAgentMessage(String raw) {
+  var sanitized = raw.trim();
+
+  // Some agent responses leak tool-call syntax into the visible transcript.
+  sanitized = sanitized.replaceAll(
+    RegExp(r'set_response_chips\s*\([^)]*\)\s*;?\s*', caseSensitive: false),
+    '',
+  );
+
+  // Also strip bare tool-name leaks (for example: "set_response_chips")
+  // and optional markdown/code formatting wrappers around it.
+  sanitized = sanitized.replaceAll(
+    RegExp(r'`?\bset_response_chips\b`?\s*;?\s*', caseSensitive: false),
+    '',
+  );
+
+  sanitized = sanitized.replaceAll(RegExp(r'\s+'), ' ').trim();
+  return sanitized;
+}
+
 // ---------------------------------------------------------------------------
 // VoicePage
 // ---------------------------------------------------------------------------
@@ -90,14 +110,13 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
   int _disconnectClearEpoch = 0;
   int _lastUserMessageTime = 0;
   int _lastUserMessageSentAt = 0;
-  // Queues set_response_chips calls that arrive before the SDK emits the
-  // matching agent text callback. ElevenLabs often sends the tool result first.
-  bool _blockChipsUntilAgentResponse = false;
-  SetResponseChipsPayload? _pendingResponseChips;
+
   late bool _isChatMode;
   bool _manualEndRequested = false;
   bool _isRecoveringSession = false;
   bool _isDisposing = false;
+  bool _sessionStarted = false;
+  bool _workflowHandoffRequested = false;
   int _recoveriesAttempted = 0;
 
   static const int _maxRecoveries = 2;
@@ -148,6 +167,9 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
           onStageCaptured: (newPhase) {
             if (mounted) {
               setState(() => _activePhase = newPhase);
+              if (newPhase >= 2) {
+                _triggerWorkflowHandoff();
+              }
             }
           },
         ),
@@ -186,6 +208,7 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
             _statusText = _isChatMode ? 'Chatting' : 'Listening';
             _isRecoveringSession = false;
             _manualEndRequested = false;
+            _workflowHandoffRequested = false;
             _recoveriesAttempted = 0;
           });
         },
@@ -199,8 +222,14 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
             return;
           }
           if (_conversationEnded || _isRecoveringSession) return;
-          if (details.reason != 'user' && _recoveriesAttempted < _maxRecoveries) {
-            _attemptRecovery(details.reason);
+          final isWorkflowHandoffDisconnect =
+              details.reason == 'user' && _workflowHandoffRequested;
+          if ((details.reason != 'user' || isWorkflowHandoffDisconnect) &&
+              _recoveriesAttempted < _maxRecoveries) {
+            _workflowHandoffRequested = false;
+            _attemptRecovery(
+              isWorkflowHandoffDisconnect ? 'workflow_handoff' : details.reason,
+            );
             return;
           }
           _finalizeConversationEnded();
@@ -240,7 +269,6 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
                   isUser: true, text: transcript, isTentative: true));
             }
             _responseChips = _ResponseChipsState.empty;
-            _pendingResponseChips = null;
             _chipsEpoch++;
             _lastUserMessageSentAt = DateTime.now().millisecondsSinceEpoch;
           });
@@ -261,7 +289,6 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
                   _TranscriptEntry(isUser: true, text: transcript));
             }
             _responseChips = _ResponseChipsState.empty;
-            _pendingResponseChips = null;
             _chipsEpoch++;
             _lastUserMessageSentAt = DateTime.now().millisecondsSinceEpoch;
           });
@@ -269,37 +296,39 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
         },
         onTentativeAgentResponse: ({required response}) {
           if (!mounted) return;
+          final sanitized = _sanitizeAgentMessage(response);
+          if (sanitized.isEmpty) return;
           setState(() {
             _lastUserMessageTime = 0;
             if (_transcript.isNotEmpty &&
                 !_transcript.last.isUser &&
                 _transcript.last.isTentative) {
-              _transcript.last.text = response;
+              _transcript.last.text = sanitized;
             } else {
               _transcript.add(_TranscriptEntry(
-                  isUser: false, text: response, isTentative: true));
+                  isUser: false, text: sanitized, isTentative: true));
             }
           });
-          _flushPendingResponseChips();
           _scrollToBottom();
         },
         onMessage: ({required message, required source}) {
           if (!mounted) return;
             if (source == Role.ai) {
+            final sanitized = _sanitizeAgentMessage(message);
+            if (sanitized.isEmpty) return;
             setState(() {
               _lastUserMessageTime = 0;
               if (_transcript.isNotEmpty &&
                   !_transcript.last.isUser &&
                   _transcript.last.isTentative) {
                 _transcript.last
-                  ..text = message
+                  ..text = sanitized
                   ..isTentative = false;
               } else {
                 _transcript.add(
-                    _TranscriptEntry(isUser: false, text: message));
+                    _TranscriptEntry(isUser: false, text: sanitized));
               }
             });
-            _flushPendingResponseChips();
             _scrollToBottom();
           }
         },
@@ -346,12 +375,6 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
   }
 
   void _applyResponseChips(SetResponseChipsPayload payload) {
-    if (_blockChipsUntilAgentResponse) {
-      _pendingResponseChips = payload;
-      print('[chips][ui] queued chips until next agent response');
-      return;
-    }
-
     final now = DateTime.now();
     final expiresAt = payload.ttlMs != null && payload.ttlMs! > 0
         ? now.add(Duration(milliseconds: payload.ttlMs!))
@@ -409,17 +432,12 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
     }
   }
 
-  void _flushPendingResponseChips() {
-    final pending = _pendingResponseChips;
-    if (pending == null || _blockChipsUntilAgentResponse) return;
-    _pendingResponseChips = null;
-    print('[chips][ui] flushing queued chips after agent response started');
-    _applyResponseChips(pending);
-  }
+
 
   void _finalizeConversationEnded() {
     if (!mounted || _conversationEnded) return;
     print('[chips][ui] finalizing conversation end');
+    _workflowHandoffRequested = false;
     final uri = Uri.base;
     final origin = uri.origin;
     final returnUrl = widget.prospectId != null
@@ -487,7 +505,6 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
       _isRecoveringSession = true;
       _statusText = 'Reconnecting…';
       _responseChips = _ResponseChipsState.empty;
-      _pendingResponseChips = null;
       _chipsEpoch++;
     });
     print(
@@ -504,6 +521,7 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
       final tokenResult = await _conversationService.getVoiceToken(
         widget.stageBucket,
         prospectId: widget.prospectId,
+        isReconnect: true,
       );
 
       if (!mounted) return;
@@ -521,7 +539,8 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
       if (phaseStr != null) {
         _activePhase = int.tryParse(phaseStr) ?? _activePhase;
       }
-      final isWorkflowHandoff = reason == 'agent';
+        final isWorkflowHandoff =
+          reason == 'agent' || reason == 'workflow_handoff';
 
       _client = _buildConversationClient();
       setState(() {});
@@ -538,11 +557,10 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
         }
       }
       if (isWorkflowHandoff) {
-        await Future<void>.delayed(const Duration(milliseconds: 300));
-        if (!mounted) return;
-        final handoffPrompt = _buildWorkflowHandoffPrompt(lastUserMsg);
-        print('[chips][ui] sending hidden workflow handoff prompt');
-        _client!.sendUserMessage(handoffPrompt);
+        // Don't send a hidden prompt—let the specialist node's system prompt
+        // instruct it to speak first with its opening question.
+        // The node is now active with resume_node set, and should auto-respond.
+        print('[chips][ui] workflow handoff: specialist node now active, awaiting auto-response');
       } else if (lastUserMsg != null && lastUserMsg.isNotEmpty) {
         // Brief delay to let the SDK settle after connect
         await Future<void>.delayed(const Duration(milliseconds: 300));
@@ -576,7 +594,17 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
     String? conversationToken,
     Map<String, dynamic>? serverDynamicVariables,
   }) async {
+    // Guard: prevent duplicate session starts for same page instance
+    if (_sessionStarted && serverDynamicVariables == null) {
+      print('[chips][ui] _startSession already called, skipping duplicate');
+      return;
+    }
+    if (serverDynamicVariables == null) {
+      _sessionStarted = true;
+    }
+
     try {
+      // Server data should override widget data for return-state and welcome text
       final dynamicVariables = <String, dynamic>{
         ...widget.dynamicVariables,
         ...?serverDynamicVariables,
@@ -607,7 +635,12 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
 
   Future<void> _endSession() async {
     _manualEndRequested = true;
-    await _client?.endSession();
+    _workflowHandoffRequested = false;
+    final status = _client?.status;
+    if (status != ConversationStatus.disconnecting &&
+        status != ConversationStatus.disconnected) {
+      await _client?.endSession();
+    }
     if (mounted) {
       setState(() {
         _conversationEnded = true;
@@ -637,8 +670,9 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
     return 'You are now taking over after an internal workflow handoff. '
         'Continue from the shared prospect context and do not repeat questions '
         'that were already answered, especially company name, industry, primary '
-        'intent, or startup stage.$lastAnswer Briefly acknowledge the handoff '
-        'and ask the next useful $phaseText question.';
+        'intent, or startup stage.$lastAnswer Do NOT acknowledge the handoff, '
+        'do NOT say "Perfect I have your stage" or any variation of it, '
+        'and do NOT greet the user. Ask the first relevant $phaseText question directly.';
   }
 
   void _scrollToBottom() {
@@ -663,13 +697,42 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
     setState(() {
       _transcript.add(_TranscriptEntry(isUser: true, text: trimmed));
       _responseChips = _ResponseChipsState.empty;
-      _pendingResponseChips = null;
       _chipsEpoch++;
       final nowMs = DateTime.now().millisecondsSinceEpoch;
       _lastUserMessageTime = nowMs;
       _lastUserMessageSentAt = nowMs;
     });
     _scrollToBottom();
+  }
+
+  void _triggerWorkflowHandoff() {
+    if (!mounted || _isRecoveringSession || _workflowHandoffRequested) {
+      return;
+    }
+
+    final status = _client?.status;
+    if (status != ConversationStatus.connected) {
+      return;
+    }
+
+    _workflowHandoffRequested = true;
+    print('[chips][ui] triggering controlled workflow handoff after phase capture');
+
+    Future<void>.delayed(const Duration(milliseconds: 600), () async {
+      if (!mounted || _isDisposing || _isRecoveringSession) return;
+      if (!_workflowHandoffRequested) return;
+
+      final currentStatus = _client?.status;
+      if (currentStatus != ConversationStatus.connected) {
+        return;
+      }
+
+      try {
+        await _client?.endSession();
+      } catch (e) {
+        print('[chips][ui] controlled workflow handoff endSession failed: $e');
+      }
+    });
   }
 
   Future<void> _loadClassificationSummary() async {
@@ -927,11 +990,15 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
                                           final isNextSame = nextEntry != null && nextEntry.isUser == entry.isUser;
                                           
                                           return VoiceBubbleRow(
+                                            key: ValueKey(
+                                              'chat_${index}_${entry.isUser}_${entry.isTentative}_${entry.text.hashCode}',
+                                            ),
                                             isUser: entry.isUser,
                                             text: entry.text,
                                             isTentative: entry.isTentative,
                                             isPrevSame: isPrevSame,
                                             isNextSame: isNextSame,
+                                            enableTypewriter: _isChatMode,
                                             agentInitial: _agentName.isNotEmpty
                                                 ? _agentName[0].toUpperCase()
                                                 : 'A',
