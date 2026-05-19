@@ -701,3 +701,36 @@ class ConversationService {
     return result;
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cache for Prospect and Product data to prevent transitions loading spinners
+// ─────────────────────────────────────────────────────────────────────────────
+
+class ProspectCache {
+  static final Map<String, ProspectInitResult> _cache = {};
+
+  static ProspectInitResult? get(String prospectId) => _cache[prospectId];
+
+  static void set(String prospectId, ProspectInitResult result) {
+    _cache[prospectId] = result;
+  }
+
+  static void clear() {
+    _cache.clear();
+  }
+}
+
+class ProductCache {
+  static final Map<String, List<ProductPublic>> _cache = {};
+
+  static List<ProductPublic>? get(String prospectId) => _cache[prospectId];
+
+  static void set(String prospectId, List<ProductPublic> products) {
+    _cache[prospectId] = products;
+  }
+
+  static void clear() {
+    _cache.clear();
+  }
+}
+

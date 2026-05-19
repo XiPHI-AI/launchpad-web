@@ -53,14 +53,35 @@ class _RelationshipHubPageState extends State<RelationshipHubPage> {
   @override
   void initState() {
     super.initState();
+    if (widget.prospectId != null) {
+      final cachedProspect = ProspectCache.get(widget.prospectId!);
+      if (cachedProspect != null) {
+        _prospect = cachedProspect;
+        _loading = false;
+      } else {
+        _loading = true;
+      }
+      final cachedProducts = ProductCache.get(widget.prospectId!);
+      if (cachedProducts != null) {
+        _products = cachedProducts;
+        _loadingProducts = false;
+      } else {
+        _loadingProducts = true;
+      }
+    }
     _hydrateProspect();
     _fetchProducts();
   }
 
   Future<void> _fetchProducts() async {
-    setState(() => _loadingProducts = true);
+    if (widget.prospectId != null && ProductCache.get(widget.prospectId!) == null) {
+      setState(() => _loadingProducts = true);
+    }
     try {
       final products = await _service.listProducts(prospectId: widget.prospectId);
+      if (widget.prospectId != null) {
+        ProductCache.set(widget.prospectId!, products);
+      }
       if (mounted) setState(() => _products = products);
     } catch (e) {
       debugPrint('Error fetching products: $e');
@@ -71,9 +92,12 @@ class _RelationshipHubPageState extends State<RelationshipHubPage> {
 
   Future<void> _hydrateProspect() async {
     if (widget.prospectId == null) return;
-    setState(() => _loading = true);
+    if (ProspectCache.get(widget.prospectId!) == null) {
+      setState(() => _loading = true);
+    }
     try {
       final prospect = await _service.getProspect(widget.prospectId!);
+      ProspectCache.set(widget.prospectId!, prospect);
       if (!mounted) return;
       setState(() => _prospect = prospect);
     } catch (_) {
@@ -153,7 +177,7 @@ class _RelationshipHubPageState extends State<RelationshipHubPage> {
   void _showProfileModal(BuildContext context) {
     showDialog(
       context: context,
-      builder: (_) => _ProspectProfileModal(
+      builder: (_) => ProspectProfileModal(
         prospectId: widget.prospectId,
         founderName: _founderName,
         companyName: _companyName,
@@ -199,7 +223,7 @@ class _RelationshipHubPageState extends State<RelationshipHubPage> {
               onProfileTap: () => _showProfileModal(context),
               onInteractionsTap: () {
                 final pid = widget.prospectId;
-                final path = pid != null ? '/?p=$pid' : '/';
+                final path = pid != null ? '/stages?p=$pid' : '/stages';
                 context.go(path);
               },
             ),
@@ -2402,14 +2426,14 @@ class _TinyBadge extends StatelessWidget {
 // Profile Modal
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _ProspectProfileModal extends StatefulWidget {
+class ProspectProfileModal extends StatefulWidget {
   final String? prospectId;
   final String founderName;
   final String companyName;
   final String initials;
   final String? stageBucket;
 
-  const _ProspectProfileModal({
+  const ProspectProfileModal({
     required this.prospectId,
     required this.founderName,
     required this.companyName,
@@ -2418,10 +2442,10 @@ class _ProspectProfileModal extends StatefulWidget {
   });
 
   @override
-  State<_ProspectProfileModal> createState() => _ProspectProfileModalState();
+  State<ProspectProfileModal> createState() => _ProspectProfileModalState();
 }
 
-class _ProspectProfileModalState extends State<_ProspectProfileModal> with SingleTickerProviderStateMixin {
+class _ProspectProfileModalState extends State<ProspectProfileModal> with SingleTickerProviderStateMixin {
   final ConversationService _service = ConversationService();
   ProspectFullProfile? _profile;
   bool _loading = true;
@@ -2431,6 +2455,8 @@ class _ProspectProfileModalState extends State<_ProspectProfileModal> with Singl
   late Animation<double> _pulseAnimation;
   bool _isVoiceTriggerHovered = false;
   bool _isFetchingToken = false;
+
+  bool get _isReturnVisit => (_profile?.conversationCount ?? 0) > 0 || (_profile?.conversationPhase ?? 1) > 1;
 
   @override
   void initState() {
@@ -2746,14 +2772,18 @@ class _ProspectProfileModalState extends State<_ProspectProfileModal> with Singl
           ),
         ),
         const SizedBox(height: 24),
-        const Text(
-          'Tap the Orb to start conversation',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: AppThemeTokens.brandInk),
+        Text(
+          _isReturnVisit
+              ? 'Tap the Orb to continue conversation'
+              : 'Tap the Orb to start conversation',
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: AppThemeTokens.brandInk),
         ),
         const SizedBox(height: 8),
-        const Text(
-          '~10 min · Nova asks, you answer',
-          style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+        Text(
+          _isReturnVisit
+              ? 'Continue where Nova left off'
+              : '~10 min · Nova asks, you answer',
+          style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
         ),
         const SizedBox(height: 48),
         if (_isFetchingToken)
@@ -2765,7 +2795,10 @@ class _ProspectProfileModalState extends State<_ProspectProfileModal> with Singl
               padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 18),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
-            child: const Text("Let's Chat", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            child: Text(
+              _isReturnVisit ? 'Continue Chat' : "Let's Chat",
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+            ),
           ),
       ],
     );

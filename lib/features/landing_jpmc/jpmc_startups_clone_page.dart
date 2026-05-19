@@ -5,6 +5,8 @@ import '../../shared/widgets/app_shell.dart';
 import '../../shared/widgets/hub_nav_bar.dart';
 import '../../theme/app_theme.dart';
 import '../../services/prospect_storage.dart';
+import '../../features/relationship_hub/relationship_hub_page.dart';
+import '../../shared/widgets/prospect_id_provider.dart';
 
 class JpmcStartupsClonePage extends StatefulWidget {
   final String? invitationCode;
@@ -47,9 +49,33 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
   bool _isLoading = false;
   String? _errorMessage;
   ProspectInitResult? _resolvedProspect;
+  ProspectInitResult? _resolvedProspectForNavbar;
   bool _startAtModeSelection = false;
   String? _storedProspectId;
   final _prospectStorage = ProspectStorage();
+
+  String get _initials {
+    final vars = _resolvedProspectForNavbar?.toDynamicVariables();
+    final name = vars?['userName']?.toString() ?? 'Guest';
+    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).take(2).toList();
+    if (parts.isEmpty) return 'G';
+    return parts.map((p) => p[0].toUpperCase()).join();
+  }
+
+  String get _companyName {
+    final vars = _resolvedProspectForNavbar?.toDynamicVariables();
+    return vars?['companyName']?.toString() ?? 'Launchpad';
+  }
+
+  String get _founderName {
+    final vars = _resolvedProspectForNavbar?.toDynamicVariables();
+    return vars?['userName']?.toString() ?? 'Guest';
+  }
+
+  bool get _isHubEnabled {
+    final phase = _resolvedProspectForNavbar?.conversationPhase ?? 1;
+    return phase > 1;
+  }
 
   @override
   void initState() {
@@ -73,8 +99,27 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
 
   Future<void> _checkStoredProspect() async {
     final pid = await _prospectStorage.getProspectId();
-    if (mounted && pid != null) {
-      setState(() => _storedProspectId = pid);
+    if (pid != null) {
+      if (mounted) {
+        setState(() {
+          _storedProspectId = pid;
+          final cached = ProspectCache.get(pid);
+          if (cached != null) {
+            _resolvedProspectForNavbar = cached;
+          }
+        });
+      }
+      try {
+        final prospect = await _service.getProspect(pid);
+        ProspectCache.set(pid, prospect);
+        if (mounted) {
+          setState(() {
+            _resolvedProspectForNavbar = prospect;
+          });
+        }
+      } catch (e) {
+        debugPrint('Failed to load prospect for navbar: $e');
+      }
     }
   }
 
@@ -149,13 +194,21 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
 
     if (_resolvedProspect != null) {
       final resolved = _resolvedProspect!;
-      return AppShell(
-        stageBucket: resolved.stageBucket,
-        prospectId: resolved.prospectId,
-        dynamicVariables: resolved.toDynamicVariables(
-          lockProfileFields: _startAtModeSelection,
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          final path = _startAtModeSelection
+              ? '/p=${Uri.encodeComponent(resolved.prospectId)}'
+              : '/stages?p=${Uri.encodeComponent(resolved.prospectId)}';
+          context.go(path);
+        }
+      });
+      return const Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(AppThemeTokens.buttonPrimary),
+          ),
         ),
-        startAtModeSelection: _startAtModeSelection,
       );
     }
 
@@ -196,13 +249,30 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
                 ),
               ),
               SliverToBoxAdapter(
-                child: HubNavBar(
-                  companyName: 'Launchpad',
-                  founderName: 'Guest',
-                  initials: 'G',
-                  activeLabel: 'Home',
-                  onInteractionsTap: _startSession,
-                  onProfileTap: () => {}, // No profile on landing page before login
+                child: ProspectIdProvider(
+                  prospectId: _storedProspectId,
+                  child: HubNavBar(
+                    companyName: _companyName,
+                    founderName: _founderName,
+                    initials: _initials,
+                    activeLabel: 'Home',
+                    isHubEnabled: _isHubEnabled,
+                    onInteractionsTap: _startSession,
+                    onProfileTap: _storedProspectId != null
+                        ? () {
+                            showDialog(
+                              context: context,
+                              builder: (_) => ProspectProfileModal(
+                                prospectId: _storedProspectId,
+                                founderName: _founderName,
+                                companyName: _companyName,
+                                initials: _initials,
+                                stageBucket: _resolvedProspectForNavbar?.stageBucket ?? 'super_agent',
+                              ),
+                            );
+                          }
+                        : () {},
+                  ),
                 ),
               ),
 

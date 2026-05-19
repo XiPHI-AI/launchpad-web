@@ -12,6 +12,7 @@ import 'no_transition_page_route.dart';
 import 'hub_nav_bar.dart';
 import '../../services/prospect_storage.dart';
 import 'prospect_id_provider.dart';
+import '../../features/relationship_hub/relationship_hub_page.dart';
 
 /// Prospect conversation shell — full-width, no SideNav.
 ///
@@ -59,9 +60,23 @@ class _AppShellState extends ConsumerState<AppShell> {
     _prospectId = widget.prospectId;
     _resolvedDynamicVariables = Map<String, dynamic>.from(widget.dynamicVariables);
     _isHubEnabled = widget.startAtModeSelection;
+
     if (_prospectId == null) {
       _initLazyProspect();
     } else {
+      final cached = ProspectCache.get(_prospectId!);
+      if (cached != null) {
+        _resolvedDynamicVariables = cached.toDynamicVariables(
+          lockProfileFields: widget.startAtModeSelection,
+        );
+        if (cached.conversationPhase > 1) {
+          _isHubEnabled = true;
+        }
+        _isHydratingReturnProspect = false;
+      } else {
+        _isHydratingReturnProspect = true;
+      }
+
       _hydrateReturnProspect().then((_) {
         if (widget.initialConversationMode != null) {
           _startConversationFromHubIfNeeded();
@@ -99,11 +114,14 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   Future<void> _hydrateReturnProspect() async {
     if (_prospectId == null) return;
-    setState(() {
-      _isHydratingReturnProspect = true;
-    });
+    if (ProspectCache.get(_prospectId!) == null) {
+      setState(() {
+        _isHydratingReturnProspect = true;
+      });
+    }
     try {
       final prospect = await _service.getProspect(_prospectId!);
+      ProspectCache.set(_prospectId!, prospect);
       if (!mounted) return;
       setState(() {
         _resolvedDynamicVariables =
@@ -142,15 +160,29 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 
   void _handleProfileTap() {
-    final router = GoRouter.of(context);
-    Navigator.of(context).pop();
-    router.go(AppRoutes.login, extra: _authRouteExtra);
+    final bool isReturnVisit = _resolvedDynamicVariables['is_return_visit'] == true || _isHubEnabled;
+    if (!isReturnVisit) {
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (_) => ProspectProfileModal(
+        prospectId: _prospectId,
+        founderName: _resolvedDynamicVariables['userName']?.toString() ?? 'Guest',
+        companyName: _resolvedDynamicVariables['companyName']?.toString() ?? 'Launchpad',
+        initials: _initials,
+        stageBucket: widget.stageBucket,
+      ),
+    );
   }
 
   /// Called by VoicePage when the user taps "Start new session".
   /// Creates a fresh prospect, then replaces the inner navigator stack with
   /// a new ConversationIntroPage.
   Future<void> _handleStartNew() async {
+    ProspectCache.clear();
+    ProductCache.clear();
     final freshProspectId = await _service.createProspect(widget.stageBucket);
     if (!mounted) return;
 
@@ -198,19 +230,25 @@ class _AppShellState extends ConsumerState<AppShell> {
 
       if (!mounted) return;
       
-      _innerNavKey.currentState?.push(
-        NoTransitionPageRoute(
-          builder: (_) => VoicePage(
-            conversationToken: tokenResult.conversationToken,
-            stageBucket: widget.stageBucket,
-            prospectId: _prospectId,
-            dynamicVariables: vars,
-            onStartNew: _handleStartNew,
-            onGoToRelationshipHub: _handleGoToRelationshipHub,
-            initialMode: mode,
-          ),
+      final voiceRoute = NoTransitionPageRoute(
+        builder: (_) => VoicePage(
+          conversationToken: tokenResult.conversationToken,
+          stageBucket: widget.stageBucket,
+          prospectId: _prospectId,
+          dynamicVariables: vars,
+          onStartNew: _handleStartNew,
+          onGoToRelationshipHub: _handleGoToRelationshipHub,
+          initialMode: mode,
         ),
       );
+
+      if (_innerNavKey.currentState != null) {
+        _innerNavKey.currentState!.pushReplacement(voiceRoute);
+      } else {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _innerNavKey.currentState?.pushReplacement(voiceRoute);
+        });
+      }
     } catch (e) {
       debugPrint('AppShell: Failed to start conversation from Hub: $e');
     } finally {
@@ -326,55 +364,55 @@ class _AppShellState extends ConsumerState<AppShell> {
         body: _isInitializingVoiceForHub
             ? const Center(child: CircularProgressIndicator())
             : Navigator(
-          key: _innerNavKey,
-          onGenerateInitialRoutes: (navigator, initialRoute) {
-            final introRoute = NoTransitionPageRoute(
-              builder: (_) => ConversationIntroPage(
-                stageBucket: widget.stageBucket,
-                prospectId: widget.prospectId,
-                dynamicVariables: _resolvedDynamicVariables,
-                onStartNew: _handleStartNew,
-                onFormFilled: _handleFormFilled,
-                onProspectFound: _handleProspectFound,
-                onGoToRelationshipHub: _handleGoToRelationshipHub,
-              ),
-            );
+                key: _innerNavKey,
+                onGenerateInitialRoutes: (navigator, initialRoute) {
+                  final introRoute = NoTransitionPageRoute(
+                    builder: (_) => ConversationIntroPage(
+                      stageBucket: widget.stageBucket,
+                      prospectId: widget.prospectId,
+                      dynamicVariables: _resolvedDynamicVariables,
+                      onStartNew: _handleStartNew,
+                      onFormFilled: _handleFormFilled,
+                      onProspectFound: _handleProspectFound,
+                      onGoToRelationshipHub: _handleGoToRelationshipHub,
+                    ),
+                  );
 
-            final skipModeSelection = widget.initialConversationMode != null;
-            final showModeSelection = (widget.startAtModeSelection || _isHubEnabled) && !skipModeSelection;
+                  final skipModeSelection = widget.initialConversationMode != null;
+                  final showModeSelection = (widget.startAtModeSelection || _isHubEnabled) && !skipModeSelection;
 
-            if (!showModeSelection) {
-              return [introRoute];
-            }
+                  if (!showModeSelection) {
+                    return [introRoute];
+                  }
 
-            return [
-              introRoute,
-              NoTransitionPageRoute(
-                builder: (_) => ModeSelectionPage(
-                  stageBucket: widget.stageBucket,
-                  prospectId: _prospectId,
-                  dynamicVariables: _resolvedDynamicVariables,
-                  onStartNew: _handleStartNew,
-                  onGoToRelationshipHub: _handleGoToRelationshipHub,
-                ),
+                  return [
+                    introRoute,
+                    NoTransitionPageRoute(
+                      builder: (_) => ModeSelectionPage(
+                        stageBucket: widget.stageBucket,
+                        prospectId: _prospectId,
+                        dynamicVariables: _resolvedDynamicVariables,
+                        onStartNew: _handleStartNew,
+                        onGoToRelationshipHub: _handleGoToRelationshipHub,
+                      ),
+                    ),
+                  ];
+                },
+                onGenerateRoute: (settings) {
+                  return NoTransitionPageRoute(
+                    settings: settings,
+                    builder: (_) => ConversationIntroPage(
+                      stageBucket: widget.stageBucket,
+                      prospectId: widget.prospectId,
+                      dynamicVariables: _resolvedDynamicVariables,
+                      onStartNew: _handleStartNew,
+                      onFormFilled: _handleFormFilled,
+                      onProspectFound: _handleProspectFound,
+                      onGoToRelationshipHub: _handleGoToRelationshipHub,
+                    ),
+                  );
+                },
               ),
-            ];
-          },
-          onGenerateRoute: (settings) {
-            return NoTransitionPageRoute(
-              settings: settings,
-              builder: (_) => ConversationIntroPage(
-                stageBucket: widget.stageBucket,
-                prospectId: widget.prospectId,
-                dynamicVariables: _resolvedDynamicVariables,
-                onStartNew: _handleStartNew,
-                onFormFilled: _handleFormFilled,
-                onProspectFound: _handleProspectFound,
-                onGoToRelationshipHub: _handleGoToRelationshipHub,
-              ),
-            );
-          },
-        ),
       ),
     );
   }
