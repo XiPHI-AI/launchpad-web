@@ -61,6 +61,10 @@ class _AppShellState extends ConsumerState<AppShell> {
     _resolvedDynamicVariables = Map<String, dynamic>.from(widget.dynamicVariables);
     _isHubEnabled = widget.startAtModeSelection;
 
+    if (widget.initialConversationMode != null) {
+      _isInitializingVoiceForHub = true;
+    }
+
     if (_prospectId == null) {
       _initLazyProspect();
     } else {
