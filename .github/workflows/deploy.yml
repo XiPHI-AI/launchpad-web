@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: launchpad-web-deploy-main
+  cancel-in-progress: true
+
 jobs:
   test-and-build:
     runs-on: ubuntu-latest
@@ -52,24 +56,31 @@ jobs:
           password: ${{ secrets.VM_PASSWORD }}
           timeout: 600s
           command_timeout: 30m
-          request_pty: true
+          request_pty: false
           script: |
             set -e
 
             cd /root/launchpad-web
-            git pull origin main
+            git -c color.ui=false pull --ff-only origin main
 
             # API and web intentionally share one compose project name
             # but are deployed from separate compose files.
             # This suppresses expected orphan warnings in logs.
             export COMPOSE_IGNORE_ORPHANS=1
+            # Force non-interactive, line-based build logs in CI output.
+            export COMPOSE_PROGRESS=plain
+            export BUILDKIT_PROGRESS=plain
 
             # Rebuild web image — --env-file passes .env.demo vars into compose substitution
             # so API_BASE_URL is correctly injected as a Docker build arg
-            docker compose -p launchpad_demo -f docker-compose.demo.yml --env-file .env.demo build --no-cache web
+            docker compose -p launchpad_demo -f docker-compose.demo.yml --env-file .env.demo build --no-cache --progress=plain web
 
-            # Swap in the new container
-            docker compose -p launchpad_demo -f docker-compose.demo.yml --env-file .env.demo up -d --force-recreate web
+            # Remove stale container safely before bringing up the new one.
+            # This avoids intermittent "No such container" failures during force-recreate.
+            docker rm -f demo_launchpad_web 2>/dev/null || true
+
+            # Start web with the newly built image
+            docker compose -p launchpad_demo -f docker-compose.demo.yml --env-file .env.demo up -d web
 
             # Clean up dangling images
             # Remove dangling images AND stale build cache to free disk space
