@@ -13,6 +13,7 @@ import '../../services/notification_service.dart';
 import '../../shared/widgets/hub_nav_bar.dart';
 import '../../shared/widgets/no_transition_page_route.dart';
 import '../../shared/widgets/prospect_id_provider.dart';
+import '../../services/prospect_storage.dart';
 import '../../shared/widgets/typewriter_reveal.dart';
 
 class _GuideMessage {
@@ -190,6 +191,14 @@ class _RelationshipHubPageState extends State<RelationshipHubPage> {
     );
   }
 
+  Future<void> _handleLogout() async {
+    ProspectCache.clear();
+    ProductCache.clear();
+    await ProspectStorage().clearProspectId();
+    if (!mounted) return;
+    context.go('/');
+  }
+
   void _showProductModal(BuildContext context, ProductPublic product) {
     showDialog(
       context: context,
@@ -224,6 +233,7 @@ class _RelationshipHubPageState extends State<RelationshipHubPage> {
               activeLabel: 'Relationship Hub',
               isHubEnabled: true,
               onProfileTap: () => _showProfileModal(context),
+              onLogout: _handleLogout,
               onInteractionsTap: () {
                 final pid = widget.prospectId;
                 final path = pid != null ? '/stages?p=$pid' : '/stages';
@@ -441,6 +451,88 @@ class _HubMainColumnState extends State<_HubMainColumn> {
   bool _hasInteractedLearning = false;
   bool _showAllProducts = false;
 
+  final List<Map<String, String>> _documents = [
+    {'name': 'Investor overview deck.pdf', 'status': 'Shared'},
+    {'name': 'Product one-pager.docx', 'status': 'Needs review'},
+  ];
+
+  DateTime? _scheduledCallDate;
+  bool _hasAddedMeetingToCalendar = false;
+
+  final DateTime _defaultFutureDate = DateTime(2026, 6, 9); // Tuesday, June 9, 2026
+
+  String _formatLongDate(DateTime dt) {
+    final weekdays = [
+      'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+    ];
+    final months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return '${weekdays[dt.weekday - 1]}, ${months[dt.month - 1]} ${dt.day}';
+  }
+
+  String _getMeetingDateString() {
+    final dt = _scheduledCallDate ?? _defaultFutureDate;
+    return '${_formatLongDate(dt)} · 2:00 PM ET · 30 min';
+  }
+
+  String _formatDate(DateTime dt) {
+    final months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return 'Added: ${months[dt.month - 1]} ${dt.day}';
+  }
+
+  String _formatDateShort(DateTime dt) {
+    final months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return '${months[dt.month - 1]} ${dt.day}';
+  }
+
+
+
+  Future<void> _selectScheduleDate(BuildContext context) async {
+    final now = DateTime.now();
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime(now.year + 5),
+    );
+    if (picked != null) {
+      setState(() {
+        _scheduledCallDate = picked;
+      });
+    }
+  }
+
+  void _showUploadModal(BuildContext context) {
+    showDialog<String>(
+      context: context,
+      builder: (_) => const _UploadDocModal(),
+    ).then((fileName) {
+      if (fileName != null && fileName.isNotEmpty) {
+        setState(() {
+          _documents.add({
+            'name': fileName,
+            'status': 'Shared',
+          });
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('"$fileName" uploaded successfully.'),
+            backgroundColor: const Color(0xFF0F6E56),
+          ),
+        );
+      }
+    });
+  }
+
   IconData _getIconForCategory(String category) {
     final c = category.toLowerCase();
     if (c.contains('payment')) return Icons.payments_outlined;
@@ -519,12 +611,12 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                                     size: 18),
                               ),
                               const SizedBox(width: 14),
-                              const Expanded(
+                              Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Text(
+                                    const Text(
                                       'UPCOMING MEETING',
                                       style: TextStyle(
                                         color: AppThemeTokens.goldAccent,
@@ -533,8 +625,8 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                                         fontWeight: FontWeight.w700,
                                       ),
                                     ),
-                                    SizedBox(height: 5),
-                                    Text(
+                                    const SizedBox(height: 5),
+                                    const Text(
                                       'Intro call with Sarah Chen',
                                       style: TextStyle(
                                         color: Colors.white,
@@ -542,10 +634,10 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                                         fontWeight: FontWeight.w700,
                                       ),
                                     ),
-                                    SizedBox(height: 4),
+                                    const SizedBox(height: 4),
                                     Text(
-                                      'Tuesday, May 6 · 2:00 PM ET · 30 min',
-                                      style: TextStyle(
+                                      _getMeetingDateString(),
+                                      style: const TextStyle(
                                         color: Color(0xFFB8C3D1),
                                         fontSize: 12,
                                       ),
@@ -555,7 +647,11 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                               ),
                               const SizedBox(width: 12),
                               OutlinedButton(
-                                onPressed: () {},
+                                onPressed: () {
+                                   setState(() {
+                                     _hasAddedMeetingToCalendar = true;
+                                   });
+                                 },
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: const Color(0xFFE2E8F0),
                                   side: const BorderSide(
@@ -566,11 +662,18 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                                       borderRadius:
                                           BorderRadius.circular(999)),
                                 ),
-                                child: const Text('Add to calendar'),
+                                child: Text(_hasAddedMeetingToCalendar
+                                    ? _formatDate(_scheduledCallDate ?? _defaultFutureDate)
+                                    : 'Add to calendar'),
                               ),
                               const SizedBox(width: 10),
                               FilledButton(
-                                onPressed: () {},
+                                onPressed: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (_) => const _PrepCallModal(),
+                                  );
+                                },
                                 style: FilledButton.styleFrom(
                                   backgroundColor: AppThemeTokens.goldAccent,
                                   foregroundColor: AppThemeTokens.modalHeader,
@@ -597,7 +700,7 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                             border: Border.all(
                                 color: const Color(0xFFE0D7C8)),
                           ),
-                          child: const Column(
+                          child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -649,13 +752,19 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                                       label: 'Contact',
                                       dark: true,
                                       icon: Icons.forum_outlined,
+                                      onTap: () {
+                                        html.window.location.href = 'mailto:sarahchen@bank.ai';
+                                      },
                                     ),
                                   ),
-                                  SizedBox(width: 8),
+                                  const SizedBox(width: 8),
                                   Expanded(
                                     child: _MiniActionButton(
-                                      label: 'Schedule',
+                                      label: _scheduledCallDate != null
+                                          ? 'Sched: ${_formatDateShort(_scheduledCallDate!)}'
+                                          : 'Schedule',
                                       dark: false,
+                                      onTap: () => _selectScheduleDate(context),
                                     ),
                                   ),
                                 ],
@@ -685,7 +794,9 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                   ),
                 ),
                 const Spacer(),
-                const _AddDocChip(),
+                _AddDocChip(
+                  onTap: () => _showUploadModal(context),
+                ),
               ],
             ),
           ),
@@ -694,11 +805,9 @@ class _HubMainColumnState extends State<_HubMainColumn> {
             child: Wrap(
               spacing: 10,
               runSpacing: 10,
-              children: const [
-                _DocChip('Investor overview deck.pdf', 'Shared'),
-                _DocChip('Product one-pager.docx', 'Needs review'),
-                _DocChip('Financial statements Q1.xlsx', 'Requested'),
-              ],
+              children: _documents.map((doc) {
+                return _DocChip(doc['name'] ?? '', doc['status'] ?? 'Shared');
+              }).toList(),
             ),
           ),
           Container(height: 1, color: const Color(0xFFE7DCC8)),
@@ -750,6 +859,7 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                       title: product.name,
                       description: product.shortDescription ?? product.description,
                       cta: 'By ${product.provider?.companyName ?? 'J.P. Morgan'}',
+                      websiteUrl: product.provider?.websiteUrl,
                       matchScore: product.matchScore,
                       matchReasoning: product.matchReasoning,
                       productId: product.productId,
@@ -1029,6 +1139,13 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
     });
   }
 
+  void _scrollToBottomInstant() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) return;
+      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+    });
+  }
+
   Future<void> _loadHistory({bool loadMore = false}) async {
     if (_loadingHistory) return;
     if (loadMore && !_historyHasMore) return;
@@ -1253,6 +1370,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
                   isPrevSame: isPrevSame,
                   isNextSame: isNextSame,
                   enableTypewriter: !msg.isUser && msg.animate,
+                  onTypewriterTick: _scrollToBottomInstant,
                 ),
               );
             }),
@@ -1459,6 +1577,7 @@ class _GuideMessageBubble extends StatelessWidget {
   final bool isPrevSame;
   final bool isNextSame;
   final bool enableTypewriter;
+  final VoidCallback? onTypewriterTick;
 
   const _GuideMessageBubble({
     super.key,
@@ -1466,6 +1585,7 @@ class _GuideMessageBubble extends StatelessWidget {
     this.isPrevSame = false,
     this.isNextSame = false,
     this.enableTypewriter = false,
+    this.onTypewriterTick,
   });
 
   @override
@@ -1543,6 +1663,7 @@ class _GuideMessageBubble extends StatelessWidget {
     final bubbleContent = TypewriterReveal(
       text: message.text,
       enabled: enableTypewriter && !isUser,
+      onTick: onTypewriterTick,
       builder: _buildMessageContent,
     );
 
@@ -1742,41 +1863,49 @@ class _MiniActionButton extends StatelessWidget {
   final String label;
   final bool dark;
   final IconData? icon;
+  final VoidCallback? onTap;
 
   const _MiniActionButton({
     required this.label,
     required this.dark,
     this.icon,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: dark ? AppThemeTokens.modalHeader : Colors.white,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: dark ? AppThemeTokens.modalHeader : const Color(0xFFE1D9CB),
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          if (icon != null) ...[
-            Icon(icon,
-                size: 15, color: dark ? Colors.white : const Color(0xFF1F2937)),
-            const SizedBox(width: 6),
-          ],
-          Text(
-            label,
-            style: TextStyle(
-              color: dark ? Colors.white : const Color(0xFF1F2937),
-              fontWeight: FontWeight.w600,
-              fontSize: 12,
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: dark ? AppThemeTokens.modalHeader : Colors.white,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: dark ? AppThemeTokens.modalHeader : const Color(0xFFE1D9CB),
             ),
           ),
-        ],
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (icon != null) ...[
+                Icon(icon,
+                    size: 15, color: dark ? Colors.white : const Color(0xFF1F2937)),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                label,
+                style: TextStyle(
+                  color: dark ? Colors.white : const Color(0xFF1F2937),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1876,31 +2005,38 @@ class _DocChip extends StatelessWidget {
 }
 
 class _AddDocChip extends StatelessWidget {
-  const _AddDocChip();
+  final VoidCallback onTap;
+  const _AddDocChip({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFFE1D9CB)),
-      ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.add, size: 16, color: Color(0xFF1F2937)),
-          SizedBox(width: 6),
-          Text(
-            'Add document',
-            style: TextStyle(
-              fontSize: 12,
-              color: Color(0xFF1F2937),
-              fontWeight: FontWeight.w600,
-            ),
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: const Color(0xFFE1D9CB)),
           ),
-        ],
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.add, size: 16, color: Color(0xFF1F2937)),
+              SizedBox(width: 6),
+              Text(
+                'Add document',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF1F2937),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1917,6 +2053,7 @@ class _ProductCard extends StatefulWidget {
   final String? matchReasoning;
   final String productId;
   final String? prospectId;
+  final String? websiteUrl;
   final VoidCallback? onTap;
 
   const _ProductCard({
@@ -1930,6 +2067,7 @@ class _ProductCard extends StatefulWidget {
     this.matchReasoning,
     required this.productId,
     this.prospectId,
+    this.websiteUrl,
     this.onTap,
     this.defaultHover = false,
     this.onInteraction,
@@ -1996,17 +2134,21 @@ class _ProductCardState extends State<_ProductCard> {
   bool get _isHovered => _localHovered ?? widget.defaultHover;
 
   void _toggleReasoning() {
+    if (widget.matchScore == null || widget.matchScore! <= 0) return;
     setState(() {
       _showReasoning = !_showReasoning;
       if (_showReasoning) {
         _overlayController.show();
       } else {
-        _overlayController.hide();
+        if (_overlayController.isShowing) {
+          _overlayController.hide();
+        }
       }
     });
   }
 
   void _showOverlay() {
+    if (widget.matchScore == null || widget.matchScore! <= 0) return;
     _fetchParaphrasedReasoning();
     if (!_showReasoning) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2018,9 +2160,10 @@ class _ProductCardState extends State<_ProductCard> {
   }
 
   void _hideOverlay() {
-    if (!_showReasoning) {
+    if (widget.matchScore == null || widget.matchScore! <= 0) return;
+    if (!_showReasoning && _overlayController.isShowing) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && !_showReasoning) {
+        if (mounted && !_showReasoning && _overlayController.isShowing) {
           _overlayController.hide();
         }
       });
@@ -2081,7 +2224,7 @@ class _ProductCardState extends State<_ProductCard> {
                             color: _isHovered ? Colors.white : widget.iconColor,
                             size: 20),
                       ),
-                      if (widget.matchScore != null)
+                      if (widget.matchScore != null && widget.matchScore! > 0)
                         OverlayPortal(
                           controller: _overlayController,
                           overlayChildBuilder: (context) {
@@ -2144,12 +2287,35 @@ class _ProductCardState extends State<_ProductCard> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Text(
-                    '${widget.cta} →',
-                    style: TextStyle(
-                      color: _isHovered ? const Color(0xFF93C5FD) : AppThemeTokens.buttonPrimary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: () {
+                        if (widget.websiteUrl != null && widget.websiteUrl!.isNotEmpty) {
+                          html.window.open(widget.websiteUrl!, '_blank');
+                        }
+                      },
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Visit the page',
+                            style: TextStyle(
+                              color: _isHovered ? const Color(0xFF93C5FD) : AppThemeTokens.buttonPrimary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              decoration: TextDecoration.underline,
+                              decorationColor: _isHovered ? const Color(0xFF93C5FD) : AppThemeTokens.buttonPrimary,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.open_in_new_rounded,
+                            size: 13,
+                            color: _isHovered ? const Color(0xFF93C5FD) : AppThemeTokens.buttonPrimary,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -3037,17 +3203,21 @@ class _ProductDetailModalState extends State<_ProductDetailModal> {
   }
 
   void _toggleReasoning() {
+    if (widget.product.matchScore == null || widget.product.matchScore! <= 0) return;
     setState(() {
       _showReasoning = !_showReasoning;
       if (_showReasoning) {
         _overlayController.show();
       } else {
-        _overlayController.hide();
+        if (_overlayController.isShowing) {
+          _overlayController.hide();
+        }
       }
     });
   }
 
   void _showOverlay() {
+    if (widget.product.matchScore == null || widget.product.matchScore! <= 0) return;
     _fetchParaphrasedReasoning();
     if (!_showReasoning) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -3059,9 +3229,10 @@ class _ProductDetailModalState extends State<_ProductDetailModal> {
   }
 
   void _hideOverlay() {
-    if (!_showReasoning) {
+    if (widget.product.matchScore == null || widget.product.matchScore! <= 0) return;
+    if (!_showReasoning && _overlayController.isShowing) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && !_showReasoning) {
+        if (mounted && !_showReasoning && _overlayController.isShowing) {
           _overlayController.hide();
         }
       });
@@ -3140,17 +3311,33 @@ class _ProductDetailModalState extends State<_ProductDetailModal> {
                                     ),
                                   ),
                                   if (product.provider!.websiteUrl != null) ...[
-                                    const SizedBox(width: 8),
+                                    const SizedBox(width: 12),
                                     MouseRegion(
                                       cursor: SystemMouseCursors.click,
                                       child: GestureDetector(
                                         onTap: () {
                                           html.window.open(product.provider!.websiteUrl!, '_blank');
                                         },
-                                        child: const Icon(
-                                          Icons.open_in_new_rounded,
-                                          color: Color(0xFFB99C4C),
-                                          size: 14,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Text(
+                                              'Visit the page',
+                                              style: TextStyle(
+                                                color: Color(0xFFB99C4C),
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w700,
+                                                decoration: TextDecoration.underline,
+                                                decorationColor: Color(0xFFB99C4C),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            const Icon(
+                                              Icons.open_in_new_rounded,
+                                              color: Color(0xFFB99C4C),
+                                              size: 13,
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),
@@ -3161,7 +3348,7 @@ class _ProductDetailModalState extends State<_ProductDetailModal> {
                           ],
                         ),
                       ),
-                      if (product.matchScore != null) ...[
+                      if (product.matchScore != null && product.matchScore! > 0) ...[
                         const SizedBox(width: 16),
                         (() {
                           final bool isMobile = MediaQuery.of(context).size.width < 768;
@@ -3831,11 +4018,11 @@ class _TeamMember {
 }
 
 final List<_TeamMember> _mockTeam = [
-  _TeamMember('Alex Chen', 'Co-Founder & CTO', 'alex@xphi.ai', 'AC'),
-  _TeamMember('Sarah Johnson', 'Head of Product', 'sarah@xphi.ai', 'SJ'),
-  _TeamMember('Michael Brown', 'Lead Engineer', 'michael@xphi.ai', 'MB'),
-  _TeamMember('Emily Davis', 'Marketing Director', 'emily@xphi.ai', 'ED'),
-  _TeamMember('David Wilson', 'Operations Lead', 'david@xphi.ai', 'DW'),
+  _TeamMember('Alex Chen', 'Co-Founder & CTO', 'alex@bank.ai', 'AC'),
+  _TeamMember('Sarah Johnson', 'Head of Product', 'sarah@bank.ai', 'SJ'),
+  _TeamMember('Michael Brown', 'Lead Engineer', 'michael@bank.ai', 'MB'),
+  _TeamMember('Emily Davis', 'Marketing Director', 'emily@bank.ai', 'ED'),
+  _TeamMember('David Wilson', 'Operations Lead', 'david@bank.ai', 'DW'),
 ];
 
 class _TeamMemberCard extends StatefulWidget {
@@ -4044,6 +4231,579 @@ class _TeamMemberProfileModal extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _UploadDocModal extends StatefulWidget {
+  const _UploadDocModal();
+
+  @override
+  State<_UploadDocModal> createState() => _UploadDocModalState();
+}
+
+class _UploadDocModalState extends State<_UploadDocModal> {
+  String? _fileName;
+  int? _fileSize;
+  bool _isDragging = false;
+  bool _isUploading = false;
+  
+  StreamSubscription? _dragOverSub;
+  StreamSubscription? _dragLeaveSub;
+  StreamSubscription? _dropSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _dragOverSub = html.window.onDragOver.listen((event) {
+      event.preventDefault();
+      if (event.dataTransfer.types?.contains('Files') == true) {
+        if (!_isDragging) {
+          setState(() {
+            _isDragging = true;
+          });
+        }
+      }
+    });
+
+    _dragLeaveSub = html.window.onDragLeave.listen((event) {
+      event.preventDefault();
+      if (_isDragging) {
+        setState(() {
+          _isDragging = false;
+        });
+      }
+    });
+
+    _dropSub = html.window.onDrop.listen((event) {
+      event.preventDefault();
+      if (_isDragging) {
+        setState(() {
+          _isDragging = false;
+        });
+      }
+      if (event.dataTransfer.files != null && event.dataTransfer.files!.isNotEmpty) {
+        final file = event.dataTransfer.files!.first;
+        _handleFileSelected(file.name, file.size);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _dragOverSub?.cancel();
+    _dragLeaveSub?.cancel();
+    _dropSub?.cancel();
+    super.dispose();
+  }
+
+  void _handleFileSelected(String name, int size) {
+    setState(() {
+      _fileName = name;
+      _fileSize = size;
+    });
+  }
+
+  void _triggerFilePicker() {
+    final input = html.InputElement(type: 'file');
+    input.accept = '.pdf,.docx,.xlsx,.xls,.png,.jpg,.jpeg';
+    input.click();
+    input.onChange.listen((event) {
+      if (input.files != null && input.files!.isNotEmpty) {
+        final file = input.files!.first;
+        _handleFileSelected(file.name, file.size);
+      }
+    });
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes <= 0) return "0 B";
+    if (bytes < 1024) return "$bytes B";
+    if (bytes < 1024 * 1024) return "${(bytes / 1024).toStringAsFixed(1)} KB";
+    if (bytes < 1024 * 1024 * 1024) return "${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB";
+    return "${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB";
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 640;
+    
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      child: Container(
+        width: isMobile ? double.infinity : 520.0,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.15),
+              blurRadius: 24,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.fromLTRB(24, 20, 16, 20),
+                color: AppThemeTokens.modalHeader,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: AppThemeTokens.goldAccent.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.cloud_upload_outlined,
+                        color: AppThemeTokens.goldAccent,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Upload Document',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded,
+                          color: Colors.white60, size: 22),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Share pitch decks, financials, or other documentation directly with your startup banking team.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF6B7280),
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    GestureDetector(
+                      onTap: _triggerFilePicker,
+                      child: Container(
+                        height: 180,
+                        decoration: BoxDecoration(
+                          color: _isDragging
+                              ? AppThemeTokens.goldAccent.withOpacity(0.06)
+                              : const Color(0xFFFAF9F6),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _isDragging
+                                ? AppThemeTokens.goldAccent
+                                : const Color(0xFFE1D9CB),
+                            width: 2,
+                            style: BorderStyle.solid,
+                          ),
+                        ),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.all(16),
+                          alignment: Alignment.center,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                _isDragging
+                                    ? Icons.file_download_outlined
+                                    : Icons.upload_file_outlined,
+                                size: 44,
+                                color: _isDragging
+                                    ? AppThemeTokens.goldAccent
+                                    : AppThemeTokens.buttonPrimary,
+                              ),
+                              const SizedBox(height: 14),
+                              Text(
+                                _isDragging
+                                    ? 'Drop the file to select'
+                                    : 'Drag & drop file here, or click to browse',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: _isDragging
+                                      ? AppThemeTokens.goldAccent
+                                      : const Color(0xFF1F2937),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              const Text(
+                                'Supports PDF, DOCX, XLSX up to 50MB',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Color(0xFF8D8578),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (_fileName != null) ...[
+                      const SizedBox(height: 20),
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE1F5EE),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFBBEAD8)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.insert_drive_file_outlined,
+                              color: Color(0xFF0F6E56),
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _fileName!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF0F6E56),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _formatBytes(_fileSize ?? 0),
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: Color(0xFF3F8A74),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.delete_outline_rounded,
+                                color: Color(0xFF0F6E56),
+                                size: 20,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _fileName = null;
+                                  _fileSize = null;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFF4B5563),
+                          ),
+                          child: const Text('Cancel'),
+                        ),
+                        const SizedBox(width: 12),
+                        FilledButton(
+                          onPressed: (_fileName == null || _isUploading)
+                              ? null
+                              : () async {
+                                  setState(() => _isUploading = true);
+                                  await Future.delayed(const Duration(milliseconds: 600));
+                                  if (mounted) {
+                                    Navigator.of(context).pop(_fileName);
+                                  }
+                                },
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppThemeTokens.buttonPrimary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 24, vertical: 8),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                          ),
+                          child: _isUploading
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor:
+                                        AlwaysStoppedAnimation(Colors.white),
+                                  ),
+                                )
+                              : const Text('Upload'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PrepCallModal extends StatelessWidget {
+  const _PrepCallModal();
+
+  @override
+  Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 640;
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      child: Container(
+        width: isMobile ? double.infinity : 520.0,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.15),
+              blurRadius: 24,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.fromLTRB(24, 20, 16, 20),
+                color: AppThemeTokens.modalHeader,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: AppThemeTokens.goldAccent.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.phone_in_talk_outlined,
+                        color: AppThemeTokens.goldAccent,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Prep for Call',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded,
+                          color: Colors.white60, size: 22),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const CircleAvatar(
+                          radius: 20,
+                          backgroundColor: AppThemeTokens.modalHeader,
+                          child: Text(
+                            'SC',
+                            style: TextStyle(
+                              color: AppThemeTokens.goldAccent,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Text(
+                                'Sarah Chen',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF1F2937),
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Innovation Banking Relationship Manager',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFF6B7280),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Suggested Talking Points & Agenda',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1F2937),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildPrepItem(
+                      text: 'Review the Q1 Financial Statements & investor deck uploaded recently.',
+                    ),
+                    _buildPrepItem(
+                      text: 'Be ready to discuss credit line options and interest rate tiers.',
+                    ),
+                    _buildPrepItem(
+                      text: 'Identify treasury services needed for international wire transfers.',
+                    ),
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFAF9F6),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFE1D9CB)),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.lightbulb_outline_rounded,
+                            color: AppThemeTokens.goldAccent,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: const [
+                                Text(
+                                  'AI Insight',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF1F2937),
+                                  ),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Sarah Chen leads innovation banking and focuses on early-stage tech funding. Emphasize your runway extension objectives during the call.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFF4B5563),
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        FilledButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppThemeTokens.buttonPrimary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 28, vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                          ),
+                          child: const Text('Start Call prep'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPrepItem({required String text}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 6, left: 4, right: 12),
+            width: 6,
+            height: 6,
+            decoration: const BoxDecoration(
+              color: AppThemeTokens.buttonPrimary,
+              shape: BoxShape.circle,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontSize: 13,
+                color: Color(0xFF4B5563),
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

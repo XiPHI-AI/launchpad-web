@@ -120,7 +120,7 @@ const _stageContent = {
 
 enum _EmailLookupAction {
   resume,
-  startFresh,
+  keepPrevious,
 }
 
 class ConversationIntroPage extends StatefulWidget {
@@ -166,14 +166,20 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
   bool _isCheckingEmail = false;
   bool _emailLookupDialogOpen = false;
   ProspectInitResult? _pendingResumeProspect;
+  String _previousValidEmail = '';
 
   // Core JPMC aesthetic colors
   static const jpmcDarkNavy = Color(0xFF131F2E);
 
-  bool get _isReadOnly =>
-      widget.dynamicVariables['lock_profile_fields'] == true;
+  bool get _isReadOnly => false;
 
-  bool get _isProfileLocked => _isReadOnly || _pendingResumeProspect != null || widget.prospectId != null;
+  bool get _isProfileLocked => false;
+
+  bool get _isReturningUser => _pendingResumeProspect != null || widget.prospectId != null;
+
+  bool get _isReturnVisit =>
+      widget.dynamicVariables['is_return_visit'] == true ||
+      (widget.prospectId != null && widget.prospectId!.isNotEmpty);
 
   @override
   void initState() {
@@ -189,6 +195,7 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
         widget.dynamicVariables['isPostIncorporated'] == true;
     _preferManual = widget.dynamicVariables['preferManual'] == true;
     _disclaimerAccepted = _isReadOnly || widget.prospectId != null;
+    _previousValidEmail = _emailController.text.trim();
     _emailController.addListener(_onEmailChanged);
     _companyController.addListener(_onFormChanged);
   }
@@ -207,6 +214,9 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
 
   void _onEmailChanged() {
     final email = _emailController.text.trim();
+    if (email != _lastCheckedEmail) {
+      _lastCheckedEmail = null;
+    }
     setState(() {
       if (_pendingResumeProspect?.email != null &&
           _pendingResumeProspect!.email != email) {
@@ -245,9 +255,12 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
       if (result.prospectId != widget.prospectId &&
           result.prospectId != _pendingResumeProspect?.prospectId) {
         await _showWelcomeBackModal(result);
+      } else {
+        _previousValidEmail = email;
       }
     } catch (e) {
-      // Not found or error, ignore
+      // Not found or error, meaning this is a new/custom email, so it is valid and safe to keep as previous
+      _previousValidEmail = email;
     } finally {
       if (mounted) setState(() => _isCheckingEmail = false);
     }
@@ -259,7 +272,7 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
 
     final action = await showDialog<_EmailLookupAction>(
       context: context,
-      barrierDismissible: true,
+      barrierDismissible: false,
       builder: (dialogContext) => Dialog(
         insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
         backgroundColor: Colors.transparent,
@@ -300,29 +313,29 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
                               Border.all(color: Colors.white.withOpacity(0.18)),
                         ),
                         child: const Icon(
-                          Icons.history_rounded,
+                          Icons.warning_amber_rounded,
                           color: AppThemeTokens.goldAccent,
                           size: 22,
                         ),
                       ),
                       const SizedBox(width: 14),
-                      (() {
-                        final firstName = result.fullName?.trim().split(RegExp(r'\s+')).first ?? '';
-                        return Expanded(
-                          child: Text(
-                            firstName.isNotEmpty ? 'Welcome back, $firstName!' : 'Welcome back!',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                            ),
+                      const Expanded(
+                        child: Text(
+                          'Email Already Exists',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
                           ),
-                        );
-                      })(),
+                        ),
+                      ),
                       IconButton(
-                        onPressed: () => context.go('/'),
+                        onPressed: () => Navigator.pop(
+                          dialogContext,
+                          _EmailLookupAction.keepPrevious,
+                        ),
                         icon: const Icon(
-                          Icons.arrow_back_rounded,
+                          Icons.close_rounded,
                           color: Colors.white,
                           size: 20,
                         ),
@@ -348,7 +361,7 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
                       ),
                       const SizedBox(height: 10),
                       const Text(
-                        "Let's continue where you left off.",
+                        "This email is already associated with an existing profile in our system. Do you want to switch to this profile, or keep your previous email?",
                         style: TextStyle(
                           color: Color(0xFF4B5563),
                           fontSize: 14,
@@ -362,7 +375,7 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
                             child: OutlinedButton(
                               onPressed: () => Navigator.pop(
                                 dialogContext,
-                                _EmailLookupAction.startFresh,
+                                _EmailLookupAction.keepPrevious,
                               ),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: const Color(0xFF374151),
@@ -375,9 +388,9 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                               ),
-                              child: const Text(
-                                'START FRESH',
-                                style: TextStyle(
+                              child: Text(
+                                _isReturnVisit ? 'KEEP PREVIOUS' : 'START FRESH',
+                                style: const TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w800,
                                 ),
@@ -401,9 +414,9 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
                                 ),
                                 elevation: 0,
                               ),
-                              child: const Text(
-                                'RESUME',
-                                style: TextStyle(
+                              child: Text(
+                                _isReturnVisit ? 'SWITCH PROFILE' : 'CONTINUE PROFILE',
+                                style: const TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w800,
                                 ),
@@ -429,11 +442,13 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
       case _EmailLookupAction.resume:
         _hydrateFromLookup(result);
         break;
-      case _EmailLookupAction.startFresh:
-        await _startFreshFromLookup();
-        break;
+      case _EmailLookupAction.keepPrevious:
       case null:
-        setState(() => _lastCheckedEmail = null);
+        setState(() {
+          _emailController.text = _previousValidEmail;
+          _lastCheckedEmail = _previousValidEmail;
+        });
+        break;
     }
   }
 
@@ -446,6 +461,7 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
       _companyController.text = result.companyName ?? '';
       _isPostIncorporated = result.incorporated;
       _disclaimerAccepted = true;
+      _previousValidEmail = _emailController.text.trim();
     });
 
     if (result.conversationPhase > 1) {
@@ -984,7 +1000,7 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
                                                           : Text(
                                                               _isSavingProfile
                                                                   ? "SAVING..."
-                                                                  : (_isProfileLocked
+                                                                  : (_isReturningUser
                                                                       ? "CONTINUE"
                                                                       : "GET STARTED"),
                                                             ),

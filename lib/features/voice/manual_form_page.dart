@@ -58,8 +58,7 @@ class _ManualFormPageState extends State<ManualFormPage> {
   bool get _canSubmit =>
       _selectedStage != null && _selectedPriorities.isNotEmpty;
 
-  bool get _isReadOnly =>
-      widget.dynamicVariables['lock_profile_fields'] == true;
+  bool get _isReadOnly => false;
 
   @override
   void initState() {

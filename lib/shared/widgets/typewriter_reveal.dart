@@ -9,12 +9,14 @@ class TypewriterReveal extends StatefulWidget {
   final String text;
   final bool enabled;
   final Widget Function(String visibleText) builder;
+  final VoidCallback? onTick;
 
   const TypewriterReveal({
     super.key,
     required this.text,
     required this.enabled,
     required this.builder,
+    this.onTick,
   });
 
   @override
@@ -80,6 +82,7 @@ class _TypewriterRevealState extends State<TypewriterReveal> {
       setState(() {
         _visibleCount = (_visibleCount + step).clamp(0, text.length);
       });
+      widget.onTick?.call();
     });
   }
 

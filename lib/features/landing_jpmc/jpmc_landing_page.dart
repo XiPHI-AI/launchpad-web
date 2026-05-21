@@ -189,6 +189,20 @@ class _JpmcLandingPageState extends State<JpmcLandingPage> {
                   activeLabel: 'Home',
                   onInteractionsTap: _startSession,
                   onProfileTap: () => {}, // No profile on landing page before login
+                  onLogout: _storedProspectId != null
+                      ? () async {
+                          ProspectCache.clear();
+                          ProductCache.clear();
+                          await _prospectStorage.clearProspectId();
+                          if (mounted) {
+                            setState(() {
+                              _storedProspectId = null;
+                              _resolvedProspect = null;
+                              _startAtModeSelection = false;
+                            });
+                          }
+                        }
+                      : null,
                 ),
               ),
               SliverToBoxAdapter(

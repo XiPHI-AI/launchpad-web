@@ -272,6 +272,21 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
                             );
                           }
                         : () {},
+                    onLogout: _storedProspectId != null
+                        ? () async {
+                            ProspectCache.clear();
+                            ProductCache.clear();
+                            await _prospectStorage.clearProspectId();
+                            if (mounted) {
+                              setState(() {
+                                _storedProspectId = null;
+                                _resolvedProspect = null;
+                                _resolvedProspectForNavbar = null;
+                                _startAtModeSelection = false;
+                              });
+                            }
+                          }
+                        : null,
                   ),
                 ),
               ),

@@ -163,6 +163,19 @@ class _AppShellState extends ConsumerState<AppShell> {
     router.go(AppRoutes.home);
   }
 
+  Future<void> _handleLogout() async {
+    ProspectCache.clear();
+    ProductCache.clear();
+    await _prospectStorage.clearProspectId();
+    if (!mounted) return;
+    setState(() {
+      _prospectId = null;
+      _resolvedDynamicVariables = {};
+      _isHubEnabled = false;
+    });
+    context.go('/');
+  }
+
   void _handleProfileTap() {
     final bool isReturnVisit = _resolvedDynamicVariables['is_return_visit'] == true || _isHubEnabled;
     if (!isReturnVisit) {
@@ -312,6 +325,7 @@ class _AppShellState extends ConsumerState<AppShell> {
               activeLabel: 'Nova',
               isHubEnabled: _isHubEnabled,
               onProfileTap: _handleProfileTap,
+              onLogout: _handleLogout,
             ),
           ),
           body: Center(
@@ -363,6 +377,7 @@ class _AppShellState extends ConsumerState<AppShell> {
             activeLabel: 'Nova',
             isHubEnabled: _isHubEnabled,
             onProfileTap: _handleProfileTap,
+            onLogout: _handleLogout,
           ),
         ),
         body: _isInitializingVoiceForHub
