@@ -17,7 +17,7 @@ class VoiceBubbleRow extends StatelessWidget {
     required this.isUser,
     required this.text,
     required this.isTentative,
-    this.agentInitial = 'A',
+    this.agentInitial = 'N',
     this.isPrevSame = false,
     this.isNextSame = false,
     this.enableTypewriter = false,

@@ -1199,11 +1199,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
   void _openReturnLink() {
     final pid = widget.prospectId;
     if (pid == null) return;
-    final uri = Uri.base;
-    final url = uri.fragment.isNotEmpty
-        ? '${uri.origin}/#/?p=$pid'
-        : '${uri.origin}/?p=$pid';
-    html.window.open(url, '_blank');
+    context.go('/?p=$pid');
   }
 
   void _openHistory() {
@@ -1617,7 +1613,7 @@ class _GuideMessageBubble extends StatelessWidget {
     final aiAvatar = avatar(
       AppThemeTokens.modalHeader,
       const Text(
-        'A',
+        'N',
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w700,
@@ -1738,7 +1734,7 @@ class _GuideTypingBubble extends StatelessWidget {
           ),
           child: const Center(
             child: Text(
-              'A',
+              'N',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,

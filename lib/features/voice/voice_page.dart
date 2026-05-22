@@ -778,6 +778,8 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
   // ---------------------------------------------------------------------------
   String get _stageLabel {
     switch (_effectiveStageBucket) {
+      case 'super_agent':
+        return '';
       case 'pre_seed':
         return 'Pre-seed';
       case 'seed':
@@ -794,26 +796,16 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
         return 'IPO & Beyond';
       default:
         // Convert snake_case to Title Case (e.g. 'super_agent_stage' → 'Super Agent Stage')
-        return _effectiveStageBucket
+        final label = _effectiveStageBucket
             .split('_')
             .map((w) => w.isEmpty ? '' : '${w[0].toUpperCase()}${w.substring(1)}')
             .join(' ');
+        return (label == 'Super Agent' || label == 'Super Agent Stage') ? '' : label;
     }
   }
 
   String get _agentName {
-    switch (_effectiveStageBucket) {
-      case 'early_stage':
-        return 'Earl';
-      case 'growth_stage':
-        return 'Gary';
-      case 'late_stage':
-        return 'Leena';
-      case 'ipo_beyond':
-        return 'Irma';
-      default:
-        return 'Alex';
-    }
+    return 'Nova';
   }
 
   int get _currentPhase => _activePhase;

@@ -42,7 +42,7 @@ const _stageContent = {
   'pre_seed': _StageContent(
     heading: 'Early-stage financial advisory',
     description:
-        'Our advisor will get to know your startup and help identify what financial support and tools make sense at your stage.',
+        'Nova will get to know your startup and help identify what financial support and tools make sense at your stage.',
     topics: [
       'Your vision, business model, and current progress',
       'Banking basics, payments infrastructure, and operational tools',
@@ -53,7 +53,7 @@ const _stageContent = {
   'seed': _StageContent(
     heading: 'Scaling-stage financial advisory',
     description:
-        'Our advisor will discuss your current financials, funding history, and the financial infrastructure you need to grow.',
+        'Nova will discuss your current financials, funding history, and the financial infrastructure you need to grow.',
     topics: [
       'Revenue metrics, burn rate, and runway',
       'Funding stack — equity, credit, and venture debt',
@@ -64,7 +64,7 @@ const _stageContent = {
   'growth': _StageContent(
     heading: 'Growth-stage financial advisory',
     description:
-        'Our advisor will explore your strategic financial priorities, global expansion plans, and enterprise-grade infrastructure needs.',
+        'Nova will explore your strategic financial priorities, global expansion plans, and enterprise-grade infrastructure needs.',
     topics: [
       'Debt structuring, treasury management, and cash optimisation',
       'Cross-border payments, FX strategy, and multi-currency operations',
@@ -74,9 +74,9 @@ const _stageContent = {
   ),
   // ── JPMC stages ───────────────────────────────────────────────────────────
   'early_stage': _StageContent(
-    heading: 'Earl — Early-stage advisor',
+    heading: 'Nova — Early-stage advisor',
     description:
-        'Earl will explore your startup\'s vision, business model, and early financial needs to recommend the right JPMC products.',
+        'Nova will explore your startup\'s vision, business model, and early financial needs to recommend the right JPMC products.',
     topics: [
       'Your founding story, business model, and current traction',
       'Banking basics, payment infrastructure, and operational tools',
@@ -85,9 +85,9 @@ const _stageContent = {
     duration: '5–8 min',
   ),
   'growth_stage': _StageContent(
-    heading: 'Gary — Growth-stage advisor',
+    heading: 'Nova — Growth-stage advisor',
     description:
-        'Gary will discuss your scaling priorities, revenue metrics, and the financial infrastructure you need for Series A/B growth.',
+        'Nova will discuss your scaling priorities, revenue metrics, and the financial infrastructure you need for Series A/B growth.',
     topics: [
       'Revenue metrics, burn rate, and runway planning',
       'Treasury foundations, credit facilities, and venture debt',
@@ -96,9 +96,9 @@ const _stageContent = {
     duration: '7–10 min',
   ),
   'late_stage': _StageContent(
-    heading: 'Leena — Late-stage advisor',
+    heading: 'Nova — Late-stage advisor',
     description:
-        'Leena will explore your strategic financial priorities, capital structure, and enterprise-grade infrastructure for Series C and beyond.',
+        'Nova will explore your strategic financial priorities, capital structure, and enterprise-grade infrastructure for Series C and beyond.',
     topics: [
       'Debt structuring, treasury management, and cash optimisation',
       'Cross-border payments, FX strategy, and global operations',
@@ -107,9 +107,9 @@ const _stageContent = {
     duration: '8–12 min',
   ),
   'ipo_beyond': _StageContent(
-    heading: 'Irma — IPO & Beyond advisor',
+    heading: 'Nova — IPO & Beyond advisor',
     description:
-        'Irma will discuss your capital markets strategy, public-market readiness, and institutional-grade financial infrastructure.',
+        'Nova will discuss your capital markets strategy, public-market readiness, and institutional-grade financial infrastructure.',
     topics: [
       'IPO readiness, capital markets access, and investor relations',
       'Enterprise treasury, cash concentration, and yield optimisation',

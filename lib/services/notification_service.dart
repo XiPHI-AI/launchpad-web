@@ -69,7 +69,7 @@ class NotificationService extends ChangeNotifier {
       iconColor: const Color(0xFF5B55D9),
     ),
     NotificationItem(
-      title: 'New message from Alex',
+      title: 'New message from Nova',
       time: '5 hours ago',
       icon: Icons.message_outlined,
       bg: const Color(0xFFE1F5EE),

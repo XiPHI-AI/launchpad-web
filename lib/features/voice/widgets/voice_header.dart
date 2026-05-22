@@ -78,7 +78,7 @@ class VoiceHeader extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Text(
-                    'Prospect workspace  ·  $agentName  ·  $stageLabel',
+                    'Prospect workspace  ·  $agentName${stageLabel.isNotEmpty ? "  ·  $stageLabel" : ""}',
                     style: TextStyle(
                       fontSize: 11,
                       color: isDark ? Colors.grey.shade400 : const Color(0xFF8d8578),
