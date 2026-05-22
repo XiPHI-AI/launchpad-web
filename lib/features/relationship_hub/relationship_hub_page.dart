@@ -4604,32 +4604,45 @@ class _PrepCallModal extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
-                padding: const EdgeInsets.fromLTRB(24, 20, 16, 20),
+                padding: const EdgeInsets.fromLTRB(24, 16, 16, 16),
                 color: AppThemeTokens.modalHeader,
                 child: Row(
                   children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: AppThemeTokens.goldAccent.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.phone_in_talk_outlined,
-                        color: AppThemeTokens.goldAccent,
-                        size: 20,
+                    const CircleAvatar(
+                      radius: 20,
+                      backgroundColor: Color(0xFF213E5B),
+                      child: Text(
+                        'SC',
+                        style: TextStyle(
+                          color: AppThemeTokens.goldAccent,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
-                    const Expanded(
-                      child: Text(
-                        'Prep for Call',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                        ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Text(
+                            'Prep Call with Sarah Chen',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Innovation Banking Relationship Manager',
+                            style: TextStyle(
+                              color: Color(0xFFB8C3D1),
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     IconButton(
@@ -4645,47 +4658,6 @@ class _PrepCallModal extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        const CircleAvatar(
-                          radius: 20,
-                          backgroundColor: AppThemeTokens.modalHeader,
-                          child: Text(
-                            'SC',
-                            style: TextStyle(
-                              color: AppThemeTokens.goldAccent,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: const [
-                              Text(
-                                'Sarah Chen',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFF1F2937),
-                                ),
-                              ),
-                              SizedBox(height: 2),
-                              Text(
-                                'Innovation Banking Relationship Manager',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Color(0xFF6B7280),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
                     const Text(
                       'Suggested Talking Points & Agenda',
                       style: TextStyle(
@@ -4749,23 +4721,23 @@ class _PrepCallModal extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        FilledButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppThemeTokens.buttonPrimary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 28, vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                          ),
-                          child: const Text('Start Call prep'),
+                    ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppThemeTokens.buttonPrimary,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                      ],
+                      ),
+                      child: const Text(
+                        'Start Call prep',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
                     ),
                   ],
                 ),

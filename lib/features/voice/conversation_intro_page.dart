@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/conversation_service.dart';
 import 'voice_page.dart';
@@ -186,7 +187,7 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
     super.initState();
     _nameController.text = widget.dynamicVariables['userName']?.toString() ?? '';
     _emailController.text =
-        widget.dynamicVariables['userEmail']?.toString() ?? '';
+        (widget.dynamicVariables['userEmail']?.toString() ?? '').toLowerCase();
     _phoneController.text =
         widget.dynamicVariables['userPhone']?.toString() ?? '';
     _companyController.text =
@@ -195,7 +196,7 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
         widget.dynamicVariables['isPostIncorporated'] == true;
     _preferManual = widget.dynamicVariables['preferManual'] == true;
     _disclaimerAccepted = _isReadOnly || widget.prospectId != null;
-    _previousValidEmail = _emailController.text.trim();
+    _previousValidEmail = _emailController.text.trim().toLowerCase();
     _emailController.addListener(_onEmailChanged);
     _companyController.addListener(_onFormChanged);
   }
@@ -213,19 +214,19 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
   }
 
   void _onEmailChanged() {
-    final email = _emailController.text.trim();
-    if (email != _lastCheckedEmail) {
+    final email = _emailController.text.trim().toLowerCase();
+    if (email != (_lastCheckedEmail ?? '').toLowerCase()) {
       _lastCheckedEmail = null;
     }
     setState(() {
       if (_pendingResumeProspect?.email != null &&
-          _pendingResumeProspect!.email != email) {
+          _pendingResumeProspect!.email!.toLowerCase() != email) {
         _pendingResumeProspect = null;
       }
     });
     if (_debounce?.isActive ?? false) _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 1000), () {
-      final settledEmail = _emailController.text.trim();
+      final settledEmail = _emailController.text.trim().toLowerCase();
       if (_isValidEmail(settledEmail)) {
         _lookupEmail(settledEmail);
       }
@@ -233,22 +234,23 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
   }
 
   bool _isValidEmail(String email) {
-    return RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email);
+    return RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email.toLowerCase());
   }
 
   Future<void> _lookupEmail(String email) async {
-    if (email == _lastCheckedEmail ||
+    final lowerEmail = email.toLowerCase();
+    if (lowerEmail == (_lastCheckedEmail ?? '').toLowerCase() ||
         _isCheckingEmail ||
         _emailLookupDialogOpen ||
         _isReadOnly) {
       return;
     }
 
-    _lastCheckedEmail = email;
+    _lastCheckedEmail = lowerEmail;
     _isCheckingEmail = true;
 
     try {
-      final result = await _service.lookupProspectByEmail(email);
+      final result = await _service.lookupProspectByEmail(lowerEmail);
       if (!mounted) return;
 
       // If we found a different prospect than the current one
@@ -256,11 +258,11 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
           result.prospectId != _pendingResumeProspect?.prospectId) {
         await _showWelcomeBackModal(result);
       } else {
-        _previousValidEmail = email;
+        _previousValidEmail = lowerEmail;
       }
     } catch (e) {
       // Not found or error, meaning this is a new/custom email, so it is valid and safe to keep as previous
-      _previousValidEmail = email;
+      _previousValidEmail = lowerEmail;
     } finally {
       if (mounted) setState(() => _isCheckingEmail = false);
     }
@@ -455,13 +457,13 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
   void _hydrateFromLookup(ProspectInitResult result) {
     setState(() {
       _pendingResumeProspect = result;
-      _emailController.text = result.email ?? _emailController.text.trim();
+      _emailController.text = (result.email ?? _emailController.text.trim()).toLowerCase();
       _nameController.text = result.fullName ?? '';
       _phoneController.text = result.phoneNumber ?? '';
       _companyController.text = result.companyName ?? '';
       _isPostIncorporated = result.incorporated;
       _disclaimerAccepted = true;
-      _previousValidEmail = _emailController.text.trim();
+      _previousValidEmail = _emailController.text.trim().toLowerCase();
     });
 
     if (result.conversationPhase > 1) {
@@ -582,7 +584,7 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
 
   bool get _canSubmit {
     if (_isProfileLocked) return true;
-    final email = _emailController.text.trim();
+    final email = _emailController.text.trim().toLowerCase();
     if (email.isEmpty) return false;
     if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email)) return false;
     if (_isPostIncorporated && _companyController.text.trim().isEmpty) return false;
@@ -806,7 +808,21 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
                                                     crossAxisAlignment: CrossAxisAlignment.start,
                                                     children: [
                                                       _buildTextField('Name', _nameController, false, hint: 'Alex Rivera', onChanged: (_) => _onFormChanged(), readOnly: _isProfileLocked),
-                                                      _buildTextField('Email', _emailController, true, hint: 'alex@yourcompany.com', onChanged: (_) => _onFormChanged(), readOnly: _isProfileLocked),
+                                                      _buildTextField(
+                                                        'Email',
+                                                        _emailController,
+                                                        true,
+                                                        hint: 'alex@yourcompany.com',
+                                                        onChanged: (_) => _onFormChanged(),
+                                                        readOnly: _isProfileLocked,
+                                                        inputFormatters: [
+                                                          TextInputFormatter.withFunction(
+                                                            (oldValue, newValue) => newValue.copyWith(
+                                                              text: newValue.text.toLowerCase(),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
                                                     ],
                                                   ),
                                                 ),
@@ -1114,7 +1130,7 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
     );
   }
 
-  Widget _buildTextField(String label, TextEditingController controller, bool isMandatory, {String? hint, void Function(String)? onChanged, Widget? trailingLabelWidget, bool readOnly = false}) {
+  Widget _buildTextField(String label, TextEditingController controller, bool isMandatory, {String? hint, void Function(String)? onChanged, Widget? trailingLabelWidget, bool readOnly = false, List<TextInputFormatter>? inputFormatters}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Column(
@@ -1142,6 +1158,7 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
             controller: controller,
             onChanged: readOnly ? null : onChanged,
             readOnly: readOnly,
+            inputFormatters: inputFormatters,
             validator: (value) {
               if (isMandatory && (value == null || value.trim().isEmpty)) {
                 return 'This field is mandatory';
