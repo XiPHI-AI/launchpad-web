@@ -324,7 +324,9 @@ class _AppShellState extends ConsumerState<AppShell> {
               initials: _initials,
               activeLabel: 'Nova',
               isHubEnabled: _isHubEnabled,
-              onProfileTap: _handleProfileTap,
+              onProfileTap: (_resolvedDynamicVariables['is_return_visit'] == true || _isHubEnabled)
+                  ? _handleProfileTap
+                  : null,
               onLogout: _handleLogout,
             ),
           ),
@@ -376,7 +378,9 @@ class _AppShellState extends ConsumerState<AppShell> {
             initials: _initials,
             activeLabel: 'Nova',
             isHubEnabled: _isHubEnabled,
-            onProfileTap: _handleProfileTap,
+            onProfileTap: (_resolvedDynamicVariables['is_return_visit'] == true || _isHubEnabled)
+                ? _handleProfileTap
+                : null,
             onLogout: _handleLogout,
           ),
         ),

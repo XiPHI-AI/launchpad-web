@@ -4,6 +4,7 @@ import '../../shared/widgets/app_shell.dart';
 import '../../shared/widgets/hub_nav_bar.dart';
 import '../../theme/app_theme.dart';
 import '../../services/prospect_storage.dart';
+import '../../shared/widgets/prospect_id_provider.dart';
 
 class JpmcLandingPage extends StatefulWidget {
   final String? invitationCode;
@@ -181,28 +182,35 @@ class _JpmcLandingPageState extends State<JpmcLandingPage> {
                   ),
                 ),
               ),
-              SliverToBoxAdapter(
-                child: HubNavBar(
-                  companyName: 'Launchpad',
-                  founderName: 'Guest',
-                  initials: 'G',
-                  activeLabel: 'Home',
-                  onInteractionsTap: _startSession,
-                  onProfileTap: () => {}, // No profile on landing page before login
-                  onLogout: _storedProspectId != null
-                      ? () async {
-                          ProspectCache.clear();
-                          ProductCache.clear();
-                          await _prospectStorage.clearProspectId();
-                          if (mounted) {
-                            setState(() {
-                              _storedProspectId = null;
-                              _resolvedProspect = null;
-                              _startAtModeSelection = false;
-                            });
-                          }
-                        }
-                      : null,
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _StickyHeaderDelegate(
+                  height: 74,
+                  child: ProspectIdProvider(
+                    prospectId: _storedProspectId,
+                    child: HubNavBar(
+                      companyName: 'Launchpad',
+                      founderName: 'Guest',
+                      initials: 'G',
+                      activeLabel: 'Home',
+                      onInteractionsTap: _startSession,
+                      onProfileTap: null, // No profile on landing page before login
+                      onLogout: _storedProspectId != null
+                          ? () async {
+                              ProspectCache.clear();
+                              ProductCache.clear();
+                              await _prospectStorage.clearProspectId();
+                              if (mounted) {
+                                setState(() {
+                                  _storedProspectId = null;
+                                  _resolvedProspect = null;
+                                  _startAtModeSelection = false;
+                                });
+                              }
+                            }
+                          : null,
+                    ),
+                  ),
                 ),
               ),
               SliverToBoxAdapter(

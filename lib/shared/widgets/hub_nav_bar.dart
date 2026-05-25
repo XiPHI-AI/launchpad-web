@@ -166,11 +166,234 @@ class HubNavBar extends StatelessWidget {
     );
   }
 
+  void _showMobileMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppThemeTokens.modalHeader,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Navigation',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                      onPressed: () => Navigator.pop(sheetContext),
+                    ),
+                  ],
+                ),
+                const Divider(color: Colors.white10),
+                const SizedBox(height: 12),
+                _mobileMenuLink(
+                  context,
+                  label: 'Home',
+                  active: activeLabel == 'Home' || activeLabel == 'Dashboard',
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    context.go('/');
+                  },
+                ),
+                const SizedBox(height: 8),
+                _mobileMenuLink(
+                  context,
+                  label: 'Relationship Hub',
+                  active: activeLabel == 'Relationship Hub',
+                  enabled: isHubEnabled,
+                  onTap: isHubEnabled ? () {
+                    Navigator.pop(sheetContext);
+                    final pid = ProspectIdProvider.of(context);
+                    if (pid != null) {
+                      context.go('/relationship-hub?p=$pid');
+                    } else {
+                      context.go('/relationship-hub');
+                    }
+                  } : null,
+                ),
+                const SizedBox(height: 8),
+                _mobileMenuLink(
+                  context,
+                  label: 'Nova',
+                  active: activeLabel == 'Nova' || activeLabel == 'Nova' || activeLabel == 'Interactions',
+                  onTap: onInteractionsTap != null ? () {
+                    Navigator.pop(sheetContext);
+                    onInteractionsTap!();
+                  } : null,
+                ),
+                const SizedBox(height: 20),
+                const Divider(color: Colors.white10),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF223A56),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: const Color(0xFFB99C4C), width: 1),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        initials,
+                        style: const TextStyle(
+                          color: AppThemeTokens.goldAccent,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            founderName,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            companyName.isNotEmpty && companyName != 'Launchpad'
+                                ? companyName
+                                : 'Launchpad Guest',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.6),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (onProfileTap != null)
+                      IconButton(
+                        icon: const Icon(Icons.settings_outlined, color: AppThemeTokens.goldAccent),
+                        onPressed: () {
+                          Navigator.pop(sheetContext);
+                          onProfileTap!();
+                        },
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    if (onLogout != null)
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(sheetContext);
+                            _showStartFreshDialog(context);
+                          },
+                          icon: const Icon(Icons.logout_rounded, size: 16),
+                          label: const Text('START FRESH'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.red[300],
+                            side: BorderSide(color: Colors.red.withOpacity(0.4)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (onLogout != null && onClose != null) const SizedBox(width: 12),
+                    if (onClose != null)
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(sheetContext);
+                            onClose!();
+                          },
+                          icon: const Icon(Icons.close_rounded, size: 16),
+                          label: const Text('CLOSE'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white12,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _mobileMenuLink(
+    BuildContext context, {
+    required String label,
+    required bool active,
+    bool enabled = true,
+    VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: active ? const Color(0xFF28486C) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: active
+                    ? Colors.white
+                    : (enabled ? const Color(0xFFB6C2D2) : const Color(0xFF5A6B80)),
+                fontSize: 15,
+                fontWeight: active ? FontWeight.bold : FontWeight.w500,
+              ),
+            ),
+            if (active)
+              const Icon(Icons.check_circle_outline, color: AppThemeTokens.goldAccent, size: 18)
+            else if (!enabled)
+              const Icon(Icons.lock_outline, color: Color(0xFF5A6B80), size: 18)
+            else
+              const Icon(Icons.chevron_right_rounded, color: Colors.white30, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final isMobile = width < 900;
+
     return Container(
       height: 74,
-      padding: const EdgeInsets.symmetric(horizontal: 28),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 28),
       color: AppThemeTokens.modalHeader,
       child: Row(
         children: [
@@ -205,113 +428,120 @@ class HubNavBar extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          Wrap(
-            spacing: 8,
-            children: [
-              NavPill(
-                label: 'Home',
-                active: activeLabel == 'Home' || activeLabel == 'Dashboard',
-                onTap: () => context.go('/'),
-              ),
-              NavPill(
-                label: 'Relationship Hub',
-                active: activeLabel == 'Relationship Hub',
-                enabled: isHubEnabled,
-                onTap: isHubEnabled ? () {
-                  final pid = ProspectIdProvider.of(context);
-                  if (pid != null) {
-                    context.go('/relationship-hub?p=$pid');
-                  } else {
-                    context.go('/relationship-hub');
-                  }
-                } : null,
-              ),
-              NavPill(
-                label: 'Nova',
-                active: activeLabel == 'Nova' || activeLabel == 'Nova' || activeLabel == 'Interactions',
-                onTap: onInteractionsTap,
-              ),
-            ],
-          ),
-          const Spacer(),
-          const NavbarNotificationIcon(),
-          const SizedBox(width: 16),
-          MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              onTap: onProfileTap,
-              behavior: HitTestBehavior.opaque,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF223A56),
-                      borderRadius: BorderRadius.circular(999),
-                      border:
-                          Border.all(color: const Color(0xFFB99C4C), width: 1),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      initials,
-                      style: const TextStyle(
-                        color: AppThemeTokens.goldAccent,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
+          if (!isMobile) ...[
+            Wrap(
+              spacing: 8,
+              children: [
+                NavPill(
+                  label: 'Home',
+                  active: activeLabel == 'Home' || activeLabel == 'Dashboard',
+                  onTap: () => context.go('/'),
+                ),
+                NavPill(
+                  label: 'Relationship Hub',
+                  active: activeLabel == 'Relationship Hub',
+                  enabled: isHubEnabled,
+                  onTap: isHubEnabled ? () {
+                    final pid = ProspectIdProvider.of(context);
+                    if (pid != null) {
+                      context.go('/relationship-hub?p=$pid');
+                    } else {
+                      context.go('/relationship-hub');
+                    }
+                  } : null,
+                ),
+                NavPill(
+                  label: 'Nova',
+                  active: activeLabel == 'Nova' || activeLabel == 'Nova' || activeLabel == 'Interactions',
+                  onTap: onInteractionsTap,
+                ),
+              ],
+            ),
+            const Spacer(),
+            const NavbarNotificationIcon(),
+            const SizedBox(width: 16),
+            MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                onTap: onProfileTap,
+                behavior: HitTestBehavior.opaque,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF223A56),
+                        borderRadius: BorderRadius.circular(999),
+                        border:
+                            Border.all(color: const Color(0xFFB99C4C), width: 1),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        initials,
+                        style: const TextStyle(
+                          color: AppThemeTokens.goldAccent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    companyName.isNotEmpty && companyName != 'Launchpad'
-                        ? companyName
-                        : founderName.split(' ').first,
-                    style: const TextStyle(
-                      color: Color(0xFFE2E8F0),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
+                    const SizedBox(width: 12),
+                    Text(
+                      companyName.isNotEmpty && companyName != 'Launchpad'
+                          ? companyName
+                          : founderName.split(' ').first,
+                      style: const TextStyle(
+                        color: Color(0xFFE2E8F0),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (onLogout != null) ...[
-            const SizedBox(width: 16),
-            GestureDetector(
-              onTap: () => _showStartFreshDialog(context),
-              child: MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.logout_rounded, color: Colors.white, size: 16),
+                  ],
                 ),
               ),
             ),
-          ],
-          if (onClose != null) ...[
-            const SizedBox(width: 16),
-            GestureDetector(
-              onTap: onClose,
-              child: MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
-                    shape: BoxShape.circle,
+            if (onLogout != null) ...[
+              const SizedBox(width: 16),
+              GestureDetector(
+                onTap: () => _showStartFreshDialog(context),
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.logout_rounded, color: Colors.white, size: 16),
                   ),
-                  child: const Icon(Icons.close_rounded, color: Colors.white, size: 18),
                 ),
               ),
+            ],
+            if (onClose != null) ...[
+              const SizedBox(width: 16),
+              GestureDetector(
+                onTap: onClose,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.close_rounded, color: Colors.white, size: 18),
+                  ),
+                ),
+              ),
+            ],
+          ] else ...[
+            IconButton(
+              icon: const Icon(Icons.menu_rounded, color: Colors.white, size: 28),
+              onPressed: () => _showMobileMenu(context),
             ),
           ],
         ],

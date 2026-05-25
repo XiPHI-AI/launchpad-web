@@ -50,6 +50,7 @@ class _RelationshipHubPageState extends State<RelationshipHubPage> {
   bool _loading = false;
   List<ProductPublic> _products = [];
   bool _loadingProducts = false;
+  bool _chatExpanded = false;
 
   static const _defaultCompany = 'Launchpad';
   static const _defaultFounder = 'Profile';
@@ -200,8 +201,10 @@ class _RelationshipHubPageState extends State<RelationshipHubPage> {
   }
 
   void _showProductModal(BuildContext context, ProductPublic product) {
-    showDialog(
+    showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (_) => _ProductDetailModal(
         product: product,
         prospectId: widget.prospectId,
@@ -210,8 +213,10 @@ class _RelationshipHubPageState extends State<RelationshipHubPage> {
   }
 
   void _showLearningModal(BuildContext context, String title) {
-    showDialog(
+    showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (_) => _LearningMaterialModal(
         title: title,
       ),
@@ -223,89 +228,36 @@ class _RelationshipHubPageState extends State<RelationshipHubPage> {
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth >= 1180;
     final isMobile = screenWidth < 768;
-    final scaffold = Scaffold(
-      backgroundColor: const Color(0xFFFAF7F0),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Container(
-              color: const Color(0xFF1E1B4B),
-              padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 16),
-              alignment: Alignment.center,
-              child: Text(
-                '🔵 Demo mockup — LaunchPad simulation${isMobile ? '' : ' of the J.P. Morgan startups page by Intelligence Labz'}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Color(0xD9C8CDFF),
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-            HubNavBar(
-              companyName: _companyName,
-              initials: _initials,
-              founderName: _founderName,
-              activeLabel: 'Relationship Hub',
-              isHubEnabled: true,
-              onProfileTap: () => _showProfileModal(context),
-              onLogout: _handleLogout,
-              onInteractionsTap: () {
-                final pid = widget.prospectId;
-                final path = pid != null ? '/stages?p=$pid' : '/stages';
-                context.go(path);
-              },
-            ),
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : isDesktop
-                      ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            const _NotificationsSection(),
-                            Expanded(
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  Expanded(
-                                      child: _HubMainColumn(
-                                    companyName: _companyName,
-                                    founderName: _founderName,
-                                    industry: _industry,
-                                    stageLabel: _stageLabel,
-                                    priorities: _priorities,
-                                    prospectId: widget.prospectId,
-                                    email: _userEmail,
-                                    onTapProduct: _showProductModal,
-                                    onTapLearning: _showLearningModal,
-                                    products: _products,
-                                  )),
-                                  SizedBox(
-                                    width: 404,
-                                    child: _AiGuidePanel(
-                                      prospectId: widget.prospectId,
-                                      founderName: _founderName,
-                                      companyName: _companyName,
-                                      industry: _industry,
-                                      stageLabel: _stageLabel,
-                                      priorities: _priorities,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        )
-                      : _HubMainColumn(
-                          companyName: _companyName,
-                          founderName: _founderName,
-                          industry: _industry,
-                          stageLabel: _stageLabel,
-                          priorities: _priorities,
-                          prospectId: widget.prospectId,
-                          email: _userEmail,
-                          products: _products,
-                          trailingPanel: _AiGuidePanel(
+    final isSmallScreen = !isDesktop;
+
+    final mainContent = _loading
+        ? const Center(child: CircularProgressIndicator())
+        : isDesktop
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const _NotificationsSection(),
+                  Expanded(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          child: _HubMainColumn(
+                            companyName: _companyName,
+                            founderName: _founderName,
+                            industry: _industry,
+                            stageLabel: _stageLabel,
+                            priorities: _priorities,
+                            prospectId: widget.prospectId,
+                            email: _userEmail,
+                            onTapProduct: _showProductModal,
+                            onTapLearning: _showLearningModal,
+                            products: _products,
+                          ),
+                        ),
+                        SizedBox(
+                          width: 404,
+                          child: _AiGuidePanel(
                             prospectId: widget.prospectId,
                             founderName: _founderName,
                             companyName: _companyName,
@@ -313,10 +265,170 @@ class _RelationshipHubPageState extends State<RelationshipHubPage> {
                             stageLabel: _stageLabel,
                             priorities: _priorities,
                           ),
-                          onTapProduct: _showProductModal,
-                          onTapLearning: _showLearningModal,
                         ),
+                      ],
+                    ),
+                  ),
+                ],
+              )
+            : _HubMainColumn(
+                companyName: _companyName,
+                founderName: _founderName,
+                industry: _industry,
+                stageLabel: _stageLabel,
+                priorities: _priorities,
+                prospectId: widget.prospectId,
+                email: _userEmail,
+                products: _products,
+                trailingPanel: null, // Chat is shown in floating bottom sheet instead!
+                onTapProduct: _showProductModal,
+                onTapLearning: _showLearningModal,
+              );
+
+    final scaffold = Scaffold(
+      backgroundColor: const Color(0xFFFAF7F0),
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Column(
+              children: [
+                Container(
+                  color: const Color(0xFF1E1B4B),
+                  padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 16),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '🔵 Demo mockup — LaunchPad simulation${isMobile ? '' : ' of the J.P. Morgan startups page by Intelligence Labz'}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xD9C8CDFF),
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                HubNavBar(
+                  companyName: _companyName,
+                  initials: _initials,
+                  founderName: _founderName,
+                  activeLabel: 'Relationship Hub',
+                  isHubEnabled: true,
+                  onProfileTap: () => _showProfileModal(context),
+                  onLogout: _handleLogout,
+                  onInteractionsTap: () {
+                    final pid = widget.prospectId;
+                    final path = pid != null ? '/stages?p=$pid' : '/stages';
+                    context.go(path);
+                  },
+                ),
+                Expanded(
+                  child: mainContent,
+                ),
+              ],
             ),
+            if (isSmallScreen && !_loading) ...[
+              // Dimmed backdrop
+              if (_chatExpanded)
+                GestureDetector(
+                  onTap: () => setState(() => _chatExpanded = false),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    color: Colors.black.withValues(alpha: 0.45),
+                  ),
+                ),
+              // Floating Action Bubble
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeInOut,
+                bottom: _chatExpanded ? -100 : 24,
+                right: 24,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: () => setState(() => _chatExpanded = true),
+                    child: Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: AppThemeTokens.modalHeader,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.25),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.forum_rounded,
+                        color: Colors.white,
+                        size: 26,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              // Sliding bottom sheet modal overlay
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.fastOutSlowIn,
+                left: 0,
+                right: 0,
+                bottom: _chatExpanded ? 0 : -MediaQuery.of(context).size.height,
+                height: MediaQuery.of(context).size.height * 0.85,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.18),
+                        blurRadius: 24,
+                        offset: const Offset(0, -6),
+                      ),
+                    ],
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    children: [
+                      GestureDetector(
+                        onTap: () => setState(() => _chatExpanded = false),
+                        onVerticalDragEnd: (details) {
+                          if (details.primaryVelocity != null && details.primaryVelocity! > 100) {
+                            setState(() => _chatExpanded = false);
+                          }
+                        },
+                        behavior: HitTestBehavior.opaque,
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Center(
+                            child: Container(
+                              width: 48,
+                              height: 5,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFD1D5DB),
+                                borderRadius: BorderRadius.circular(2.5),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: _AiGuidePanel(
+                          prospectId: widget.prospectId,
+                          founderName: _founderName,
+                          companyName: _companyName,
+                          industry: _industry,
+                          stageLabel: _stageLabel,
+                          priorities: _priorities,
+                          onClose: () => setState(() => _chatExpanded = false),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -363,6 +475,7 @@ class _NotificationsSectionState extends State<_NotificationsSection> {
   @override
   Widget build(BuildContext context) {
     final activeItems = _notifService.activeHubNotifications;
+    final isMobile = MediaQuery.of(context).size.width < 768;
     if (activeItems.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -384,15 +497,12 @@ class _NotificationsSectionState extends State<_NotificationsSection> {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 0, 24, 18),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ...() {
-                final List<Widget> activeCards = [];
-                for (int i = 0; i < activeItems.length; i++) {
-                  final item = activeItems[i];
-                  activeCards.add(
-                    Expanded(
+          child: isMobile
+              ? Column(
+                  children: List.generate(activeItems.length, (i) {
+                    final item = activeItems[i];
+                    return Padding(
+                      padding: EdgeInsets.only(bottom: i < activeItems.length - 1 ? 12 : 0),
                       child: _NotificationCard(
                         icon: item.icon,
                         iconColor: item.iconColor,
@@ -402,25 +512,46 @@ class _NotificationsSectionState extends State<_NotificationsSection> {
                         footer: item.footer,
                         onDismiss: () => _dismissCard(i),
                       ),
-                    ),
-                  );
-                }
+                    );
+                  }),
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ...() {
+                      final List<Widget> activeCards = [];
+                      for (int i = 0; i < activeItems.length; i++) {
+                        final item = activeItems[i];
+                        activeCards.add(
+                          Expanded(
+                            child: _NotificationCard(
+                              icon: item.icon,
+                              iconColor: item.iconColor,
+                              iconBg: item.bg,
+                              title: item.title,
+                              message: item.message,
+                              footer: item.footer,
+                              onDismiss: () => _dismissCard(i),
+                            ),
+                          ),
+                        );
+                      }
 
-                while (activeCards.length < 3) {
-                  activeCards.add(const Expanded(child: SizedBox.shrink()));
-                }
+                      while (activeCards.length < 3) {
+                        activeCards.add(const Expanded(child: SizedBox.shrink()));
+                      }
 
-                final List<Widget> finalRow = [];
-                for (int i = 0; i < activeCards.length; i++) {
-                  finalRow.add(activeCards[i]);
-                  if (i < activeCards.length - 1) {
-                    finalRow.add(const SizedBox(width: 12));
-                  }
-                }
-                return finalRow;
-              }(),
-            ],
-          ),
+                      final List<Widget> finalRow = [];
+                      for (int i = 0; i < activeCards.length; i++) {
+                        finalRow.add(activeCards[i]);
+                        if (i < activeCards.length - 1) {
+                          finalRow.add(const SizedBox(width: 12));
+                        }
+                      }
+                      return finalRow;
+                    }(),
+                  ],
+                ),
         ),
         Container(height: 1, color: const Color(0xFFE7DCC8)),
       ],
@@ -576,12 +707,16 @@ class _HubMainColumnState extends State<_HubMainColumn> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isDesktop = screenWidth >= 1180;
+    final isMobile = screenWidth < 768;
+
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // On mobile, show notifications inside the scroll view
-          if (widget.trailingPanel != null) const _NotificationsSection(),
+          if (!isDesktop) const _NotificationsSection(),
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
             child: Column(
@@ -598,199 +733,393 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                       ),
                 ),
                 const SizedBox(height: 18),
-                IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(18),
-                          decoration: BoxDecoration(
-                            color: AppThemeTokens.modalHeader,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 42,
-                                height: 42,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF213E5B),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                      color: const Color(0xFF314C68)),
-                                ),
-                                child: const Icon(
-                                    Icons.calendar_today_rounded,
-                                    color: AppThemeTokens.goldAccent,
-                                    size: 18),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
+                isMobile
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(18),
+                            decoration: BoxDecoration(
+                              color: AppThemeTokens.modalHeader,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
                                   children: [
-                                    const Text(
-                                      'UPCOMING MEETING',
-                                      style: TextStyle(
-                                        color: AppThemeTokens.goldAccent,
-                                        fontSize: 10,
-                                        letterSpacing: 1.1,
-                                        fontWeight: FontWeight.w700,
+                                    Container(
+                                      width: 42,
+                                      height: 42,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF213E5B),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                            color: const Color(0xFF314C68)),
                                       ),
+                                      child: const Icon(
+                                          Icons.calendar_today_rounded,
+                                          color: AppThemeTokens.goldAccent,
+                                          size: 18),
                                     ),
-                                    const SizedBox(height: 5),
-                                    const Text(
-                                      'Intro call with Sarah Chen',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 19,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      _getMeetingDateString(),
-                                      style: const TextStyle(
-                                        color: Color(0xFFB8C3D1),
-                                        fontSize: 12,
+                                    const SizedBox(width: 14),
+                                    const Expanded(
+                                      child: Text(
+                                        'UPCOMING MEETING',
+                                        style: TextStyle(
+                                          color: AppThemeTokens.goldAccent,
+                                          fontSize: 10,
+                                          letterSpacing: 1.1,
+                                          fontWeight: FontWeight.w700,
+                                        ),
                                       ),
                                     ),
                                   ],
                                 ),
-                              ),
-                              const SizedBox(width: 12),
-                              OutlinedButton(
-                                onPressed: () {
-                                   setState(() {
-                                     _hasAddedMeetingToCalendar = true;
-                                   });
-                                 },
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: const Color(0xFFE2E8F0),
-                                  side: const BorderSide(
-                                      color: Color(0xFF3E5B79)),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 12),
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius:
-                                          BorderRadius.circular(999)),
+                                const SizedBox(height: 12),
+                                const Text(
+                                  'Intro call with Sarah Chen',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 19,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
-                                child: Text(_hasAddedMeetingToCalendar
-                                    ? _formatDate(_scheduledCallDate ?? _defaultFutureDate)
-                                    : 'Add to calendar'),
-                              ),
-                              const SizedBox(width: 10),
-                              FilledButton(
-                                onPressed: () {
-                                  showDialog(
-                                    context: context,
-                                    builder: (_) => const _PrepCallModal(),
-                                  );
-                                },
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: AppThemeTokens.goldAccent,
-                                  foregroundColor: AppThemeTokens.modalHeader,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 12),
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius:
-                                          BorderRadius.circular(999)),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _getMeetingDateString(),
+                                  style: const TextStyle(
+                                    color: Color(0xFFB8C3D1),
+                                    fontSize: 12,
+                                  ),
                                 ),
-                                child: const Text('Prep for call'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      SizedBox(
-                        width: 260,
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                                color: const Color(0xFFE0D7C8)),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Row(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 24,
-                                    backgroundColor:
-                                        AppThemeTokens.modalHeader,
-                                    child: Text(
-                                      'SC',
-                                      style: TextStyle(
-                                        color: AppThemeTokens.goldAccent,
-                                        fontWeight: FontWeight.w700,
+                                const SizedBox(height: 16),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton(
+                                        onPressed: () {
+                                          setState(() {
+                                            _hasAddedMeetingToCalendar = true;
+                                          });
+                                        },
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: const Color(0xFFE2E8F0),
+                                          side: const BorderSide(
+                                              color: Color(0xFF3E5B79)),
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 12),
+                                          shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(999)),
+                                        ),
+                                        child: Text(_hasAddedMeetingToCalendar
+                                            ? _formatDate(_scheduledCallDate ?? _defaultFutureDate)
+                                            : 'Add to calendar'),
                                       ),
                                     ),
-                                  ),
-                                  SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: FilledButton(
+                                        onPressed: () {
+                                          showDialog(
+                                            context: context,
+                                            builder: (_) => const _PrepCallModal(),
+                                          );
+                                        },
+                                        style: FilledButton.styleFrom(
+                                          backgroundColor: AppThemeTokens.goldAccent,
+                                          foregroundColor: AppThemeTokens.modalHeader,
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 12),
+                                          shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(999)),
+                                        ),
+                                        child: const Text('Prep for call'),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                  color: const Color(0xFFE0D7C8)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Row(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 24,
+                                      backgroundColor:
+                                          AppThemeTokens.modalHeader,
+                                      child: Text(
+                                        'SC',
+                                        style: TextStyle(
+                                          color: AppThemeTokens.goldAccent,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: const [
+                                          Text(
+                                            'Sarah Chen',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 17,
+                                            ),
+                                          ),
+                                          SizedBox(height: 2),
+                                          Text(
+                                            'Innovation Banking',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Color(0xFF6B7280),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 14),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _MiniActionButton(
+                                        label: 'Contact',
+                                        dark: true,
+                                        icon: Icons.email_outlined,
+                                        onTap: () {
+                                          html.window.location.href = 'mailto:sarahchen@bank.ai';
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: _MiniActionButton(
+                                        label: _scheduledCallDate != null
+                                            ? 'Sched: ${_formatDateShort(_scheduledCallDate!)}'
+                                            : 'Schedule',
+                                        dark: false,
+                                        onTap: () => _selectScheduleDate(context),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    : IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.all(18),
+                                decoration: BoxDecoration(
+                                  color: AppThemeTokens.modalHeader,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 42,
+                                      height: 42,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF213E5B),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                            color: const Color(0xFF314C68)),
+                                      ),
+                                      child: const Icon(
+                                          Icons.calendar_today_rounded,
+                                          color: AppThemeTokens.goldAccent,
+                                          size: 18),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          const Text(
+                                            'UPCOMING MEETING',
+                                            style: TextStyle(
+                                              color: AppThemeTokens.goldAccent,
+                                              fontSize: 10,
+                                              letterSpacing: 1.1,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 5),
+                                          const Text(
+                                            'Intro call with Sarah Chen',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 19,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            _getMeetingDateString(),
+                                            style: const TextStyle(
+                                              color: Color(0xFFB8C3D1),
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    OutlinedButton(
+                                      onPressed: () {
+                                        setState(() {
+                                          _hasAddedMeetingToCalendar = true;
+                                        });
+                                      },
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: const Color(0xFFE2E8F0),
+                                        side: const BorderSide(
+                                            color: Color(0xFF3E5B79)),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 16, vertical: 12),
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(999)),
+                                      ),
+                                      child: Text(_hasAddedMeetingToCalendar
+                                          ? _formatDate(_scheduledCallDate ?? _defaultFutureDate)
+                                          : 'Add to calendar'),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    FilledButton(
+                                      onPressed: () {
+                                        showDialog(
+                                          context: context,
+                                          builder: (_) => const _PrepCallModal(),
+                                        );
+                                      },
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor: AppThemeTokens.goldAccent,
+                                        foregroundColor: AppThemeTokens.modalHeader,
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 16, vertical: 12),
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(999)),
+                                      ),
+                                      child: const Text('Prep for call'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            SizedBox(
+                              width: 260,
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                      color: const Color(0xFFE0D7C8)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Row(
                                       children: [
-                                        Text(
-                                          'Sarah Chen',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 17,
+                                        CircleAvatar(
+                                          radius: 24,
+                                          backgroundColor:
+                                              AppThemeTokens.modalHeader,
+                                          child: Text(
+                                            'SC',
+                                            style: TextStyle(
+                                              color: AppThemeTokens.goldAccent,
+                                              fontWeight: FontWeight.w700,
+                                            ),
                                           ),
                                         ),
-                                        SizedBox(height: 2),
-                                        Text(
-                                          'Innovation Banking',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Color(0xFF6B7280),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: const [
+                                              Text(
+                                                'Sarah Chen',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w700,
+                                                  fontSize: 17,
+                                                ),
+                                              ),
+                                              SizedBox(height: 2),
+                                              Text(
+                                                'Innovation Banking',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: Color(0xFF6B7280),
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ],
                                     ),
-                                  ),
-                                ],
-                              ),
-                              SizedBox(height: 14),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _MiniActionButton(
-                                      label: 'Contact',
-                                      dark: true,
-                                      icon: Icons.forum_outlined,
-                                      onTap: () {
-                                        html.window.location.href = 'mailto:sarahchen@bank.ai';
-                                      },
+                                    const SizedBox(height: 14),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: _MiniActionButton(
+                                            label: 'Contact',
+                                            dark: true,
+                                            icon: Icons.email_outlined,
+                                            onTap: () {
+                                              html.window.location.href = 'mailto:sarahchen@bank.ai';
+                                            },
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: _MiniActionButton(
+                                            label: _scheduledCallDate != null
+                                                ? 'Sched: ${_formatDateShort(_scheduledCallDate!)}'
+                                                : 'Schedule',
+                                            dark: false,
+                                            onTap: () => _selectScheduleDate(context),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: _MiniActionButton(
-                                      label: _scheduledCallDate != null
-                                          ? 'Sched: ${_formatDateShort(_scheduledCallDate!)}'
-                                          : 'Schedule',
-                                      dark: false,
-                                      onTap: () => _selectScheduleDate(context),
-                                    ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
               ],
             ),
           ),
@@ -856,6 +1185,7 @@ class _HubMainColumnState extends State<_HubMainColumn> {
             child: Wrap(
               spacing: 14,
               runSpacing: 14,
+              alignment: isMobile ? WrapAlignment.center : WrapAlignment.start,
               children: [
                 ...(() {
                   final sorted = List<ProductPublic>.from(widget.products)
@@ -866,7 +1196,7 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                   final tint = _getTintForCategory(product.category);
 
                   return SizedBox(
-                    width: 320,
+                    width: isMobile ? (screenWidth - 48).clamp(320.0, 480.0) : 320.0,
                     child: _ProductCard(
                       icon: icon,
                       tint: tint,
@@ -944,13 +1274,17 @@ class _HubMainColumnState extends State<_HubMainColumn> {
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
             child: LayoutBuilder(
               builder: (context, constraints) {
+                final isMobile = MediaQuery.of(context).size.width < 768;
+                final crossAxisCount = isMobile ? 1 : 2;
                 const spacing = 16.0;
-                const targetItemHeight = 140.0;
-                final itemWidth = (constraints.maxWidth - spacing) / 2;
+                final targetItemHeight = isMobile ? 170.0 : 140.0;
+                final itemWidth = isMobile
+                    ? constraints.maxWidth
+                    : (constraints.maxWidth - spacing) / 2;
                 final childAspectRatio = itemWidth / targetItemHeight;
 
                 return GridView.count(
-                  crossAxisCount: 2,
+                  crossAxisCount: crossAxisCount,
                   crossAxisSpacing: spacing,
                   mainAxisSpacing: spacing,
                   shrinkWrap: true,
@@ -1021,6 +1355,7 @@ class _AiGuidePanel extends StatefulWidget {
   final String industry;
   final String stageLabel;
   final List<String> priorities;
+  final VoidCallback? onClose;
 
   const _AiGuidePanel({
     this.prospectId,
@@ -1029,6 +1364,7 @@ class _AiGuidePanel extends StatefulWidget {
     required this.industry,
     required this.stageLabel,
     required this.priorities,
+    this.onClose,
   });
 
   @override
@@ -3267,219 +3603,265 @@ class _ProductDetailModalState extends State<_ProductDetailModal> {
   Widget build(BuildContext context) {
     final product = widget.product;
     final icon = _getIconForCategory(product.category);
-    final isMobile = MediaQuery.of(context).size.width < 640;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isDesktop = screenWidth >= 1180;
 
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-      child: Container(
-        width: isMobile ? double.infinity : 840,
-        height: isMobile ? null : 680.0,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
+    Widget? matchChip;
+    if (product.matchScore != null && product.matchScore! > 0) {
+      matchChip = OverlayPortal(
+        controller: _overlayController,
+        overlayChildBuilder: (context) => _buildReasoningOverlay(context),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) {
+            _showOverlay();
+          },
+          onExit: (_) {
+            _hideOverlay();
+          },
+          child: GestureDetector(
+            onTap: _toggleReasoning,
+            child: Container(
+              key: _modalChipKey,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1D9E75).withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF1D9E75).withOpacity(0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${(product.matchScore! * 100).toInt()}% match',
+                    style: const TextStyle(
+                      color: Color(0xFF34D399),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.info_outline_rounded, color: Color(0xFF34D399), size: 14),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: () => Navigator.of(context).pop(),
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: GestureDetector(
+          onTap: () {},
+          behavior: HitTestBehavior.opaque,
           child: Container(
-            color: Colors.white,
-            child: Column(
-              children: [
-                // ── Header ─────────────────────────────────────────
-                Container(
-                  padding: const EdgeInsets.fromLTRB(24, 24, 16, 20),
+            width: isDesktop ? 840 : double.infinity,
+            height: MediaQuery.of(context).size.height * 0.85,
+            child: Material(
+              color: Colors.white,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: [
+              // Drag handle/peek bar
+              GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                onVerticalDragEnd: (details) {
+                  if (details.primaryVelocity != null && details.primaryVelocity! > 100) {
+                    Navigator.of(context).pop();
+                  }
+                },
+                behavior: HitTestBehavior.opaque,
+                child: Container(
                   color: AppThemeTokens.modalHeader,
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(11),
-                        ),
-                        child: Icon(icon, color: Colors.white, size: 22),
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Center(
+                    child: Container(
+                      width: 48,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(2.5),
                       ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              product.name,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+              // ── Header ─────────────────────────────────────────
+              Container(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+                color: AppThemeTokens.modalHeader,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(11),
+                          ),
+                          child: Icon(icon, color: Colors.white, size: 22),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                product.name,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
-                            ),
-                            if (product.provider != null) ...[
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Text(
-                                    '${product.provider!.companyName}${product.provider!.hqLocation != null ? ' • ${product.provider!.hqLocation}' : ''}',
-                                    style: const TextStyle(
-                                      color: Color(0xFFB99C4C),
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                              if (product.provider != null) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${product.provider!.companyName}${product.provider!.hqLocation != null ? ' • ${product.provider!.hqLocation}' : ''}',
+                                  style: const TextStyle(
+                                    color: Color(0xFFB99C4C),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
                                   ),
-                                  if (product.provider!.websiteUrl != null) ...[
-                                    const SizedBox(width: 12),
-                                    MouseRegion(
-                                      cursor: SystemMouseCursors.click,
-                                      child: GestureDetector(
-                                        onTap: () {
-                                          html.window.open(product.provider!.websiteUrl!, '_blank');
-                                        },
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            const Text(
-                                              'Visit the page',
-                                              style: TextStyle(
-                                                color: Color(0xFFB99C4C),
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w700,
-                                                decoration: TextDecoration.underline,
-                                                decorationColor: Color(0xFFB99C4C),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 4),
-                                            const Icon(
-                                              Icons.open_in_new_rounded,
-                                              color: Color(0xFFB99C4C),
-                                              size: 13,
-                                            ),
-                                          ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    if ((product.provider != null && product.provider!.websiteUrl != null) || matchChip != null) ...[
+                      const SizedBox(height: 12),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 58),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            if (product.provider != null && product.provider!.websiteUrl != null)
+                              MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: GestureDetector(
+                                  onTap: () {
+                                    html.window.open(product.provider!.websiteUrl!, '_blank');
+                                  },
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: const [
+                                      Text(
+                                        'Visit the page',
+                                        style: TextStyle(
+                                          color: Color(0xFFB99C4C),
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                          decoration: TextDecoration.underline,
+                                          decorationColor: Color(0xFFB99C4C),
                                         ),
                                       ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ],
+                                      SizedBox(width: 4),
+                                      Icon(
+                                        Icons.open_in_new_rounded,
+                                        color: Color(0xFFB99C4C),
+                                        size: 13,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                            else
+                              const SizedBox.shrink(),
+                            if (matchChip != null)
+                              matchChip
+                            else
+                              const SizedBox.shrink(),
                           ],
                         ),
                       ),
-                      if (product.matchScore != null && product.matchScore! > 0) ...[
-                        const SizedBox(width: 16),
-                        (() {
-                          final bool isMobile = MediaQuery.of(context).size.width < 768;
-                          return OverlayPortal(
-                            controller: _overlayController,
-                            overlayChildBuilder: (context) => _buildReasoningOverlay(context),
-                            child: MouseRegion(
-                              cursor: SystemMouseCursors.click,
-                              onEnter: (_) {
-                                setState(() => _isMatchHovered = true);
-                                _showOverlay();
-                              },
-                              onExit: (_) {
-                                setState(() => _isMatchHovered = false);
-                                _hideOverlay();
-                              },
-                              child: GestureDetector(
-                                onTap: _toggleReasoning,
-                                child: Container(
-                                  key: _modalChipKey,
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF1D9E75).withOpacity(0.15),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: const Color(0xFF1D9E75).withOpacity(0.3)),
-                                  ),
-                                  child: Text(
-                                    '${(product.matchScore! * 100).toInt()}% match',
-                                    style: const TextStyle(
-                                      color: Color(0xFF34D399),
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        })(),
-                      ],
-                      const SizedBox(width: 8),
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded,
-                            color: Colors.white60, size: 24),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
                     ],
-                  ),
+                  ],
                 ),
-                // ── Body ───────────────────────────────────────────
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(32, 12, 32, 32),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildDropdownSection(
-                          title: 'OVERVIEW',
-                          initiallyExpanded: true,
-                          content: Text(
-                            product.description,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              color: Color(0xFF1E293B),
-                              height: 1.5,
-                            ),
+              ),
+              // ── Body ───────────────────────────────────────────
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(32, 12, 32, 32),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildDropdownSection(
+                        title: 'OVERVIEW',
+                        initiallyExpanded: true,
+                        content: Text(
+                          product.description,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            color: Color(0xFF1E293B),
+                            height: 1.5,
                           ),
                         ),
-                        
-                        if (product.features.isNotEmpty)
-                          _buildDropdownSection(
-                            title: 'KEY FEATURES',
-                            content: _buildColumnList(product.features.map((f) => f.toString()).toList()),
-                          ),
-                        
-                        if (product.benefits.isNotEmpty)
-                          _buildDropdownSection(
-                            title: 'BENEFITS',
-                            content: _buildColumnList(product.benefits),
-                          ),
-                        
-                        if (product.pricingDetails != null)
-                          _buildDropdownSection(
-                            title: 'PRICING',
-                            content: Text(
-                              product.pricingDetails!,
-                              style: const TextStyle(
-                                fontSize: 15,
-                                color: Color(0xFF334155),
-                              ),
-                            ),
-                          ),
-                        
-                        if (product.eligibilityCriteria.isNotEmpty)
-                          _buildDropdownSection(
-                            title: 'ELIGIBILITY',
-                            content: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: product.eligibilityCriteria.entries.map((e) =>
-                                  _buildBulletPoint('${e.key}: ${e.value}')).toList(),
-                            ),
-                          ),
-
+                      ),
+                      
+                      if (product.features.isNotEmpty)
                         _buildDropdownSection(
-                          title: 'CLASSIFICATION',
+                          title: 'KEY FEATURES',
+                          content: _buildColumnList(product.features.map((f) => f.toString()).toList()),
+                        ),
+                      
+                      if (product.benefits.isNotEmpty)
+                        _buildDropdownSection(
+                          title: 'BENEFITS',
+                          content: _buildColumnList(product.benefits),
+                        ),
+                      
+                      if (product.pricingDetails != null)
+                        _buildDropdownSection(
+                          title: 'PRICING',
                           content: Text(
-                            '${product.category}${product.subcategory != null ? ' • ${product.subcategory}' : ''}',
+                            product.pricingDetails!,
                             style: const TextStyle(
                               fontSize: 15,
                               color: Color(0xFF334155),
                             ),
                           ),
                         ),
-                      ],
-                    ),
+                      
+                      if (product.eligibilityCriteria.isNotEmpty)
+                        _buildDropdownSection(
+                          title: 'ELIGIBILITY',
+                          content: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: product.eligibilityCriteria.entries.map((e) =>
+                                _buildBulletPoint('${e.key}: ${e.value}')).toList(),
+                          ),
+                        ),
+
+                      _buildDropdownSection(
+                        title: 'CLASSIFICATION',
+                        content: Text(
+                          '${product.category}${product.subcategory != null ? ' • ${product.subcategory}' : ''}',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            color: Color(0xFF334155),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
+        ),
+      ),
         ),
       ),
     );
@@ -3752,68 +4134,94 @@ class _LearningMaterialModal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isMobile = MediaQuery.of(context).size.width < 640;
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-      child: Container(
-        width: isMobile ? double.infinity : 840,
-        height: isMobile ? null : 680.0,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isDesktop = screenWidth >= 1180;
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: () => Navigator.of(context).pop(),
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: GestureDetector(
+          onTap: () {},
+          behavior: HitTestBehavior.opaque,
           child: Container(
-            color: Colors.white,
-            child: Column(
-              children: [
-                // ── Header ─────────────────────────────────────────
-                Container(
-                  padding: const EdgeInsets.fromLTRB(24, 24, 16, 20),
+            width: isDesktop ? 840 : double.infinity,
+            height: MediaQuery.of(context).size.height * 0.85,
+            child: Material(
+              color: Colors.white,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: [
+              // Drag handle/peek bar
+              GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                onVerticalDragEnd: (details) {
+                  if (details.primaryVelocity != null && details.primaryVelocity! > 100) {
+                    Navigator.of(context).pop();
+                  }
+                },
+                behavior: HitTestBehavior.opaque,
+                child: Container(
                   color: AppThemeTokens.modalHeader,
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFB99C4C).withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(11),
-                        ),
-                        child: const Icon(Icons.menu_book_rounded, color: Color(0xFFB99C4C), size: 22),
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Center(
+                    child: Container(
+                      width: 48,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(2.5),
                       ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              title,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            const Text(
-                              'CURATED GUIDE • 8 MIN READ',
-                              style: TextStyle(
-                                color: Colors.white60,
-                                fontSize: 11,
-                                letterSpacing: 1.1,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded,
-                            color: Colors.white60, size: 24),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
+              ),
+              // ── Header ─────────────────────────────────────────
+              Container(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+                color: AppThemeTokens.modalHeader,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFB99C4C).withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      child: const Icon(Icons.menu_book_rounded, color: Color(0xFFB99C4C), size: 22),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'CURATED GUIDE • 8 MIN READ',
+                            style: TextStyle(
+                              color: Colors.white60,
+                              fontSize: 11,
+                              letterSpacing: 1.1,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
                 // ── Body ───────────────────────────────────────────
                 Expanded(
                   child: SingleChildScrollView(
@@ -3930,8 +4338,9 @@ class _LearningMaterialModal extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildSection(String title, String content) {
     return Column(
