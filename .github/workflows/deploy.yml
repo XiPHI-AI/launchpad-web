@@ -61,7 +61,9 @@ jobs:
             set -e
 
             cd /root/launchpad-web
-            git -c color.ui=false pull --ff-only origin main
+            git fetch origin main
+            git reset --hard origin/main
+            git clean -fd
 
             # API and web intentionally share one compose project name
             # but are deployed from separate compose files.
