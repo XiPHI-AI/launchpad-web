@@ -3176,9 +3176,25 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
                                           ),
                                           Expanded(
                                             flex: 4,
-                                            child: Padding(
-                                              padding: const EdgeInsets.only(top: 16),
-                                              child: _buildVoiceInteractionArea(),
+                                            child: ScrollConfiguration(
+                                              behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                                              child: LayoutBuilder(
+                                                builder: (context, constraints) {
+                                                  return SingleChildScrollView(
+                                                    child: ConstrainedBox(
+                                                      constraints: BoxConstraints(
+                                                        minHeight: constraints.maxHeight,
+                                                      ),
+                                                      child: Center(
+                                                        child: Padding(
+                                                          padding: const EdgeInsets.symmetric(vertical: 16),
+                                                          child: _buildVoiceInteractionArea(),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                              ),
                                             ),
                                           ),
                                         ],
@@ -3290,8 +3306,8 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
           child: GestureDetector(
             onTap: _isFetchingToken ? null : () => _startSession(isChatMode: false),
             child: SizedBox(
-              height: 200,
-              width: 200,
+              height: 180,
+              width: 180,
               child: AnimatedBuilder(
                 animation: _pulseAnimation,
                 builder: (ctx, child) {
@@ -3301,31 +3317,31 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
                     children: [
                       for (int i = 0; i < 3; i++)
                         Container(
-                          width: 110 + (100 * ((_pulseAnimation.value + (i * 0.33)) % 1.0)),
-                          height: 110 + (100 * ((_pulseAnimation.value + (i * 0.33)) % 1.0)),
+                          width: 104 + (92 * ((_pulseAnimation.value + (i * 0.33)) % 1.0)),
+                          height: 104 + (92 * ((_pulseAnimation.value + (i * 0.33)) % 1.0)),
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: AppThemeTokens.buttonPrimary.withOpacity(0.3 * (1.0 - ((_pulseAnimation.value + (i * 0.33)) % 1.0))),
+                              color: AppThemeTokens.buttonPrimary.withOpacity(0.35 * (1.0 - ((_pulseAnimation.value + (i * 0.33)) % 1.0))),
                               width: 1.5,
                             ),
                           ),
                         ),
                       Container(
-                        width: 110,
-                        height: 110,
+                        width: 104,
+                        height: 104,
                         decoration: BoxDecoration(
                           color: color,
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
                               color: color.withOpacity(0.3),
-                              blurRadius: 15,
-                              offset: const Offset(0, 5),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
                             )
                           ],
                         ),
-                        child: const Icon(Icons.graphic_eq_rounded, color: Colors.white, size: 48),
+                        child: const Icon(Icons.graphic_eq_rounded, color: Colors.white, size: 46),
                       ),
                     ],
                   );
@@ -3334,21 +3350,23 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
             ),
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
         Text(
           _isReturnVisit
               ? 'Tap the Orb to continue conversation'
               : 'Tap the Orb to start conversation',
           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: AppThemeTokens.brandInk),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Text(
           _isReturnVisit
               ? 'Continue where Nova left off'
               : '⏱️ 4-7 min · Nova asks, you answer',
           style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
         ),
-        const SizedBox(height: 48),
+        const SizedBox(height: 16),
+        _buildOrSeparator(),
+        const SizedBox(height: 16),
         if (_isFetchingToken)
           const CircularProgressIndicator(color: AppThemeTokens.buttonPrimary)
         else
@@ -3364,6 +3382,30 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
             ),
           ),
       ],
+    );
+  }
+
+  Widget _buildOrSeparator() {
+    return SizedBox(
+      width: 160,
+      child: Row(
+        children: [
+          Expanded(child: Container(height: 1, color: Colors.black.withOpacity(0.06))),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              'OR',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+                color: Colors.black.withOpacity(0.25),
+              ),
+            ),
+          ),
+          Expanded(child: Container(height: 1, color: Colors.black.withOpacity(0.06))),
+        ],
+      ),
     );
   }
 
