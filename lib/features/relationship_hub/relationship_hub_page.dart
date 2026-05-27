@@ -201,26 +201,49 @@ class _RelationshipHubPageState extends State<RelationshipHubPage> {
   }
 
   void _showProductModal(BuildContext context, ProductPublic product) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _ProductDetailModal(
-        product: product,
-        prospectId: widget.prospectId,
-      ),
-    );
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isDesktop = screenWidth >= 1180;
+    if (isDesktop) {
+      showDialog(
+        context: context,
+        builder: (_) => _ProductDetailModal(
+          product: product,
+          prospectId: widget.prospectId,
+        ),
+      );
+    } else {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => _ProductDetailModal(
+          product: product,
+          prospectId: widget.prospectId,
+        ),
+      );
+    }
   }
 
   void _showLearningModal(BuildContext context, String title) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _LearningMaterialModal(
-        title: title,
-      ),
-    );
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isDesktop = screenWidth >= 1180;
+    if (isDesktop) {
+      showDialog(
+        context: context,
+        builder: (_) => _LearningMaterialModal(
+          title: title,
+        ),
+      );
+    } else {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => _LearningMaterialModal(
+          title: title,
+        ),
+      );
+    }
   }
 
   @override
@@ -3053,7 +3076,8 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
             children: [
               // ── Header ─────────────────────────────────────────────────────
               Container(
-                padding: const EdgeInsets.fromLTRB(24, 24, 16, 20),
+                padding: isMobile ? const EdgeInsets.fromLTRB(24, 24, 16, 20) : const EdgeInsets.fromLTRB(24, 20, 16, 16),
+                height: isMobile ? null : 120.0,
                 color: const Color(0xFF131F2E),
                 child: Row(
                   children: [
@@ -3650,6 +3674,232 @@ class _ProductDetailModalState extends State<_ProductDetailModal> {
       );
     }
 
+    final modalContent = Column(
+      children: [
+        if (!isDesktop)
+          // Drag handle/peek bar
+          GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            onVerticalDragEnd: (details) {
+              if (details.primaryVelocity != null && details.primaryVelocity! > 100) {
+                Navigator.of(context).pop();
+              }
+            },
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              color: AppThemeTokens.modalHeader,
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Center(
+                child: Container(
+                  width: 48,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(2.5),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        // ── Header ─────────────────────────────────────────
+        Container(
+          padding: isDesktop ? const EdgeInsets.fromLTRB(24, 20, 16, 16) : const EdgeInsets.fromLTRB(24, 24, 24, 20),
+          height: isDesktop ? 120.0 : null,
+          color: AppThemeTokens.modalHeader,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: Icon(icon, color: Colors.white, size: 22),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          product.name,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        if (product.provider != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            '${product.provider!.companyName}${product.provider!.hqLocation != null ? ' • ${product.provider!.hqLocation}' : ''}',
+                            style: const TextStyle(
+                              color: Color(0xFFB99C4C),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (matchChip != null && isDesktop) ...[
+                    const SizedBox(width: 14),
+                    matchChip,
+                  ],
+                  if (isDesktop) ...[
+                    const SizedBox(width: 14),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded,
+                          color: Colors.white70, size: 24),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ],
+              ),
+              if ((product.provider != null && product.provider!.websiteUrl != null) || matchChip != null) ...[
+                SizedBox(height: isDesktop ? 4 : 8),
+                Padding(
+                  padding: const EdgeInsets.only(left: 58),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      if (product.provider != null && product.provider!.websiteUrl != null)
+                        MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: GestureDetector(
+                            onTap: () {
+                              html.window.open(product.provider!.websiteUrl!, '_blank');
+                            },
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Text(
+                                  'Visit the page',
+                                  style: TextStyle(
+                                    color: Color(0xFFB99C4C),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    decoration: TextDecoration.underline,
+                                    decorationColor: Color(0xFFB99C4C),
+                                  ),
+                                ),
+                                SizedBox(width: 4),
+                                Icon(
+                                  Icons.open_in_new_rounded,
+                                  color: Color(0xFFB99C4C),
+                                  size: 13,
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      else
+                        const SizedBox.shrink(),
+                      if (matchChip != null && !isDesktop)
+                        matchChip
+                      else
+                        const SizedBox.shrink(),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        // ── Body ───────────────────────────────────────────
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(32, 12, 32, 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildDropdownSection(
+                  title: 'OVERVIEW',
+                  initiallyExpanded: true,
+                  content: Text(
+                    product.description,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      color: Color(0xFF1E293B),
+                      height: 1.5,
+                    ),
+                  ),
+                ),
+                if (product.features.isNotEmpty)
+                  _buildDropdownSection(
+                    title: 'KEY FEATURES',
+                    content: _buildColumnList(product.features.map((f) => f.toString()).toList()),
+                  ),
+                if (product.benefits.isNotEmpty)
+                  _buildDropdownSection(
+                    title: 'BENEFITS',
+                    content: _buildColumnList(product.benefits),
+                  ),
+                if (product.pricingDetails != null)
+                  _buildDropdownSection(
+                    title: 'PRICING',
+                    content: Text(
+                      product.pricingDetails!,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        color: Color(0xFF334155),
+                      ),
+                    ),
+                  ),
+                if (product.eligibilityCriteria.isNotEmpty)
+                  _buildDropdownSection(
+                    title: 'ELIGIBILITY',
+                    content: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: product.eligibilityCriteria.entries.map((e) =>
+                          _buildBulletPoint('${e.key}: ${e.value}')).toList(),
+                    ),
+                  ),
+                _buildDropdownSection(
+                  title: 'CLASSIFICATION',
+                  content: Text(
+                    '${product.category}${product.subcategory != null ? ' • ${product.subcategory}' : ''}',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      color: Color(0xFF334155),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+
+    if (isDesktop) {
+      return Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        child: Container(
+          width: 840,
+          height: 680.0,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: modalContent,
+          ),
+        ),
+      );
+    }
+
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: () => Navigator.of(context).pop(),
@@ -3659,209 +3909,15 @@ class _ProductDetailModalState extends State<_ProductDetailModal> {
           onTap: () {},
           behavior: HitTestBehavior.opaque,
           child: Container(
-            width: isDesktop ? 840 : double.infinity,
+            width: double.infinity,
             height: MediaQuery.of(context).size.height * 0.85,
             child: Material(
               color: Colors.white,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
               clipBehavior: Clip.antiAlias,
-              child: Column(
-                children: [
-              // Drag handle/peek bar
-              GestureDetector(
-                onTap: () => Navigator.of(context).pop(),
-                onVerticalDragEnd: (details) {
-                  if (details.primaryVelocity != null && details.primaryVelocity! > 100) {
-                    Navigator.of(context).pop();
-                  }
-                },
-                behavior: HitTestBehavior.opaque,
-                child: Container(
-                  color: AppThemeTokens.modalHeader,
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Center(
-                    child: Container(
-                      width: 48,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(2.5),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              // ── Header ─────────────────────────────────────────
-              Container(
-                padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
-                color: AppThemeTokens.modalHeader,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(11),
-                          ),
-                          child: Icon(icon, color: Colors.white, size: 22),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                product.name,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              if (product.provider != null) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  '${product.provider!.companyName}${product.provider!.hqLocation != null ? ' • ${product.provider!.hqLocation}' : ''}',
-                                  style: const TextStyle(
-                                    color: Color(0xFFB99C4C),
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    if ((product.provider != null && product.provider!.websiteUrl != null) || matchChip != null) ...[
-                      const SizedBox(height: 12),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 58),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            if (product.provider != null && product.provider!.websiteUrl != null)
-                              MouseRegion(
-                                cursor: SystemMouseCursors.click,
-                                child: GestureDetector(
-                                  onTap: () {
-                                    html.window.open(product.provider!.websiteUrl!, '_blank');
-                                  },
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: const [
-                                      Text(
-                                        'Visit the page',
-                                        style: TextStyle(
-                                          color: Color(0xFFB99C4C),
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w700,
-                                          decoration: TextDecoration.underline,
-                                          decorationColor: Color(0xFFB99C4C),
-                                        ),
-                                      ),
-                                      SizedBox(width: 4),
-                                      Icon(
-                                        Icons.open_in_new_rounded,
-                                        color: Color(0xFFB99C4C),
-                                        size: 13,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              )
-                            else
-                              const SizedBox.shrink(),
-                            if (matchChip != null)
-                              matchChip
-                            else
-                              const SizedBox.shrink(),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              // ── Body ───────────────────────────────────────────
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(32, 12, 32, 32),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildDropdownSection(
-                        title: 'OVERVIEW',
-                        initiallyExpanded: true,
-                        content: Text(
-                          product.description,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            color: Color(0xFF1E293B),
-                            height: 1.5,
-                          ),
-                        ),
-                      ),
-                      
-                      if (product.features.isNotEmpty)
-                        _buildDropdownSection(
-                          title: 'KEY FEATURES',
-                          content: _buildColumnList(product.features.map((f) => f.toString()).toList()),
-                        ),
-                      
-                      if (product.benefits.isNotEmpty)
-                        _buildDropdownSection(
-                          title: 'BENEFITS',
-                          content: _buildColumnList(product.benefits),
-                        ),
-                      
-                      if (product.pricingDetails != null)
-                        _buildDropdownSection(
-                          title: 'PRICING',
-                          content: Text(
-                            product.pricingDetails!,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              color: Color(0xFF334155),
-                            ),
-                          ),
-                        ),
-                      
-                      if (product.eligibilityCriteria.isNotEmpty)
-                        _buildDropdownSection(
-                          title: 'ELIGIBILITY',
-                          content: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: product.eligibilityCriteria.entries.map((e) =>
-                                _buildBulletPoint('${e.key}: ${e.value}')).toList(),
-                          ),
-                        ),
-
-                      _buildDropdownSection(
-                        title: 'CLASSIFICATION',
-                        content: Text(
-                          '${product.category}${product.subcategory != null ? ' • ${product.subcategory}' : ''}',
-                          style: const TextStyle(
-                            fontSize: 15,
-                            color: Color(0xFF334155),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+              child: modalContent,
+            ),
           ),
-        ),
-      ),
         ),
       ),
     );
@@ -4136,6 +4192,219 @@ class _LearningMaterialModal extends StatelessWidget {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth >= 1180;
+    final modalContent = Column(
+      children: [
+        if (!isDesktop)
+          // Drag handle/peek bar
+          GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            onVerticalDragEnd: (details) {
+              if (details.primaryVelocity != null && details.primaryVelocity! > 100) {
+                Navigator.of(context).pop();
+              }
+            },
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              color: AppThemeTokens.modalHeader,
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Center(
+                child: Container(
+                  width: 48,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(2.5),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        // ── Header ─────────────────────────────────────────
+        Container(
+          padding: isDesktop ? const EdgeInsets.fromLTRB(24, 20, 16, 16) : const EdgeInsets.fromLTRB(24, 24, 24, 20),
+          height: isDesktop ? 120.0 : null,
+          color: AppThemeTokens.modalHeader,
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFB99C4C).withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: const Icon(Icons.menu_book_rounded, color: Color(0xFFB99C4C), size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'CURATED GUIDE • 8 MIN READ',
+                      style: TextStyle(
+                        color: Colors.white60,
+                        fontSize: 11,
+                        letterSpacing: 1.1,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (isDesktop)
+                IconButton(
+                  icon: const Icon(Icons.close_rounded,
+                      color: Colors.white70, size: 24),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+            ],
+          ),
+        ),
+        // ── Body ───────────────────────────────────────────
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(40),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSection('INTRODUCTION', 
+                  'For early-stage startups, the foundation of your financial operations can dictate your speed of growth. This guide outlines how to establish a robust banking setup that automates manual tasks, ensures compliance, and prepares you for your first institutional funding round.'),
+                
+                const SizedBox(height: 32),
+                
+                _buildSection('WHY BANKING ARCHITECTURE MATTERS', 
+                  'Many founders treat banking as a utility, but it’s actually your most critical financial infrastructure. A well-designed setup helps you:\n\n• Maintain clean books for future audits\n• Automate vendor payments without manual oversight\n• Safeguard investor capital through multi-layered security\n• Leverage treasury solutions to extend your runway'),
+                
+                const SizedBox(height: 40),
+                
+                const Text(
+                  'KEY STEPS TO GETTING STARTED',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: AppThemeTokens.modalHeader,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                
+                _buildStepCard(
+                  '1', 
+                  'Choose the Right Entity Bank Account', 
+                  'Ensure your bank supports C-Corp structures and has specialized startup teams who understand VC-backed growth models.'
+                ),
+                _buildStepCard(
+                  '2', 
+                  'Implement Proper Segregation of Duties', 
+                  'Set up secondary approvers for large transfers to prevent fraud and internal errors from day one.'
+                ),
+                _buildStepCard(
+                  '3', 
+                  'Link Your Accounting Stack', 
+                  'Connect your bank feeds directly to QuickBooks or Xero to eliminate manual data entry and minimize reconciliation lag.'
+                ),
+                
+                const SizedBox(height: 40),
+                
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.lightbulb_outline_rounded, color: Color(0xFFB99C4C), size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            'PRO TIP',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFFB99C4C),
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Consider opening a secondary "Reserve" account. Move 80% of your venture capital into this account and only pull into your "Operating" account what is needed for the month\'s burn. This reduces risk and improves interest yield management.',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.blueGrey.shade800,
+                          height: 1.6,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(height: 40),
+                
+                const Divider(color: Color(0xFFE2E8F0)),
+                const SizedBox(height: 20),
+                const Text(
+                  'Ready to optimize your treasury?\nSchedule a 1:1 consultation with Sarah to review your current setup.',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF475569),
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () {},
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppThemeTokens.buttonPrimary,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Book Consultation', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.white)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+
+    if (isDesktop) {
+      return Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        child: Container(
+          width: 840,
+          height: 680.0,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: modalContent,
+          ),
+        ),
+      );
+    }
+
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: () => Navigator.of(context).pop(),
@@ -4145,201 +4414,18 @@ class _LearningMaterialModal extends StatelessWidget {
           onTap: () {},
           behavior: HitTestBehavior.opaque,
           child: Container(
-            width: isDesktop ? 840 : double.infinity,
+            width: double.infinity,
             height: MediaQuery.of(context).size.height * 0.85,
             child: Material(
               color: Colors.white,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
               clipBehavior: Clip.antiAlias,
-              child: Column(
-                children: [
-              // Drag handle/peek bar
-              GestureDetector(
-                onTap: () => Navigator.of(context).pop(),
-                onVerticalDragEnd: (details) {
-                  if (details.primaryVelocity != null && details.primaryVelocity! > 100) {
-                    Navigator.of(context).pop();
-                  }
-                },
-                behavior: HitTestBehavior.opaque,
-                child: Container(
-                  color: AppThemeTokens.modalHeader,
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Center(
-                    child: Container(
-                      width: 48,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(2.5),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              // ── Header ─────────────────────────────────────────
-              Container(
-                padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
-                color: AppThemeTokens.modalHeader,
-                child: Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFB99C4C).withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(11),
-                      ),
-                      child: const Icon(Icons.menu_book_rounded, color: Color(0xFFB99C4C), size: 22),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'CURATED GUIDE • 8 MIN READ',
-                            style: TextStyle(
-                              color: Colors.white60,
-                              fontSize: 11,
-                              letterSpacing: 1.1,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-                // ── Body ───────────────────────────────────────────
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(40),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildSection('INTRODUCTION', 
-                          'For early-stage startups, the foundation of your financial operations can dictate your speed of growth. This guide outlines how to establish a robust banking setup that automates manual tasks, ensures compliance, and prepares you for your first institutional funding round.'),
-                        
-                        const SizedBox(height: 32),
-                        
-                        _buildSection('WHY BANKING ARCHITECTURE MATTERS', 
-                          'Many founders treat banking as a utility, but it’s actually your most critical financial infrastructure. A well-designed setup helps you:\n\n• Maintain clean books for future audits\n• Automate vendor payments without manual oversight\n• Safeguard investor capital through multi-layered security\n• Leverage treasury solutions to extend your runway'),
-                        
-                        const SizedBox(height: 40),
-                        
-                        const Text(
-                          'KEY STEPS TO GETTING STARTED',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: AppThemeTokens.modalHeader,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        
-                        _buildStepCard(
-                          '1', 
-                          'Choose the Right Entity Bank Account', 
-                          'Ensure your bank supports C-Corp structures and has specialized startup teams who understand VC-backed growth models.'
-                        ),
-                        _buildStepCard(
-                          '2', 
-                          'Implement Proper Segregation of Duties', 
-                          'Set up secondary approvers for large transfers to prevent fraud and internal errors from day one.'
-                        ),
-                        _buildStepCard(
-                          '3', 
-                          'Link Your Accounting Stack', 
-                          'Connect your bank feeds directly to QuickBooks or Xero to eliminate manual data entry and minimize reconciliation lag.'
-                        ),
-                        
-                        const SizedBox(height: 40),
-                        
-                        Container(
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Row(
-                                children: [
-                                  Icon(Icons.lightbulb_outline_rounded, color: Color(0xFFB99C4C), size: 20),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'PRO TIP',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w800,
-                                      color: Color(0xFFB99C4C),
-                                      letterSpacing: 1,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                'Consider opening a secondary "Reserve" account. Move 80% of your venture capital into this account and only pull into your "Operating" account what is needed for the month\'s burn. This reduces risk and improves interest yield management.',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.blueGrey.shade800,
-                                  height: 1.6,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        
-                        const SizedBox(height: 40),
-                        
-                        const Divider(color: Color(0xFFE2E8F0)),
-                        const SizedBox(height: 20),
-                        const Text(
-                          'Ready to optimize your treasury?\nSchedule a 1:1 consultation with Sarah to review your current setup.',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF475569),
-                            height: 1.5,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        ElevatedButton(
-                          onPressed: () {},
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppThemeTokens.buttonPrimary,
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          child: const Text('Book Consultation', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.white)),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+              child: modalContent,
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
 }
 
   Widget _buildSection(String title, String content) {
