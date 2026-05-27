@@ -2453,6 +2453,7 @@ class _ProductCard extends StatefulWidget {
 class _ProductCardState extends State<_ProductCard> {
   bool? _localHovered;
   bool _isMatchHovered = false;
+  bool _isOverlayHovered = false;
   bool _showReasoning = false;
   final _overlayController = OverlayPortalController();
   final GlobalKey _cardChipKey = GlobalKey();
@@ -2531,13 +2532,11 @@ class _ProductCardState extends State<_ProductCard> {
 
   void _hideOverlay() {
     if (widget.matchScore == null || widget.matchScore! <= 0) return;
-    if (!_showReasoning && _overlayController.isShowing) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && !_showReasoning && _overlayController.isShowing) {
-          _overlayController.hide();
-        }
-      });
-    }
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted && !_showReasoning && !_isMatchHovered && !_isOverlayHovered && _overlayController.isShowing) {
+        _overlayController.hide();
+      }
+    });
   }
 
   @override
@@ -2715,10 +2714,17 @@ class _ProductCardState extends State<_ProductCard> {
               left: offset.dx - (280 - chipSize.width),
               top: offset.dy + chipSize.height + 8,
               width: 280,
-              child: IgnorePointer(
+              child: MouseRegion(
+                onEnter: (_) {
+                  setState(() => _isOverlayHovered = true);
+                },
+                onExit: (_) {
+                  setState(() => _isOverlayHovered = false);
+                  _hideOverlay();
+                },
                 child: Material(
-                color: Colors.transparent,
-                child: Container(
+                  color: Colors.transparent,
+                  child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF0FDFA),
@@ -2769,6 +2775,7 @@ class _ProductCardState extends State<_ProductCard> {
                         ))
                       else if (_paraphrasedReasoning != null)
                         MarkdownBody(
+                          selectable: true,
                           data: _paraphrasedReasoning!,
                           styleSheet: MarkdownStyleSheet(
                             p: const TextStyle(
@@ -2783,7 +2790,7 @@ class _ProductCardState extends State<_ProductCard> {
                           ),
                         )
                       else
-                        Text(
+                        SelectableText(
                           widget.matchReasoning ?? "Reasoning unavailable",
                           style: const TextStyle(
                             fontSize: 13,
@@ -3527,6 +3534,7 @@ class _ProductDetailModalState extends State<_ProductDetailModal> {
   final _overlayController = OverlayPortalController();
   final GlobalKey _modalChipKey = GlobalKey();
   bool _isMatchHovered = false;
+  bool _isOverlayHovered = false;
   bool _showReasoning = false;
 
   String? _paraphrasedReasoning;
@@ -3601,13 +3609,11 @@ class _ProductDetailModalState extends State<_ProductDetailModal> {
 
   void _hideOverlay() {
     if (widget.product.matchScore == null || widget.product.matchScore! <= 0) return;
-    if (!_showReasoning && _overlayController.isShowing) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && !_showReasoning && _overlayController.isShowing) {
-          _overlayController.hide();
-        }
-      });
-    }
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted && !_showReasoning && !_isMatchHovered && !_isOverlayHovered && _overlayController.isShowing) {
+        _overlayController.hide();
+      }
+    });
   }
 
   IconData _getIconForCategory(String category) {
@@ -3969,8 +3975,14 @@ class _ProductDetailModalState extends State<_ProductDetailModal> {
               left: offset.dx - (280 - chipSize.width),
               top: offset.dy + chipSize.height + 8,
               width: 280,
-              child: IgnorePointer(
-                ignoring: _showReasoning ? false : true,
+              child: MouseRegion(
+                onEnter: (_) {
+                  setState(() => _isOverlayHovered = true);
+                },
+                onExit: (_) {
+                  setState(() => _isOverlayHovered = false);
+                  _hideOverlay();
+                },
                 child: Material(
                   color: Colors.transparent,
                   child: Container(
@@ -4024,6 +4036,7 @@ class _ProductDetailModalState extends State<_ProductDetailModal> {
                           ))
                         else if (_paraphrasedReasoning != null)
                           MarkdownBody(
+                            selectable: true,
                             data: _paraphrasedReasoning!,
                             styleSheet: MarkdownStyleSheet(
                               p: const TextStyle(
@@ -4038,7 +4051,7 @@ class _ProductDetailModalState extends State<_ProductDetailModal> {
                             ),
                           )
                         else
-                          Text(
+                          SelectableText(
                             widget.product.matchReasoning ?? "Reasoning unavailable",
                             style: const TextStyle(
                               fontSize: 13,
