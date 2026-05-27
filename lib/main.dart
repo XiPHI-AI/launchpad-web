@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/auth/auth_provider.dart';
 import 'router/app_router.dart';
+import 'shared/widgets/demo_banner.dart';
 import 'theme/app_theme.dart';
 
 void main() {
@@ -19,6 +20,7 @@ class LaunchPadApp extends ConsumerStatefulWidget {
 class _LaunchPadAppState extends ConsumerState<LaunchPadApp> {
   late final RouterRefreshNotifier _routerNotifier;
   late final _router;
+  bool _showDemoBanner = true;
 
   @override
   void initState() {
@@ -54,6 +56,25 @@ class _LaunchPadAppState extends ConsumerState<LaunchPadApp> {
       debugShowCheckedModeBanner: false,
       routerConfig: _router,
       theme: AppTheme.light(),
+      builder: (context, child) {
+        final routedChild = child ?? const SizedBox.shrink();
+
+        if (!_showDemoBanner) {
+          return routedChild;
+        }
+
+        return Column(
+          children: [
+            DemoBanner(
+              dismissible: true,
+              onDismiss: () {
+                setState(() => _showDemoBanner = false);
+              },
+            ),
+            Expanded(child: routedChild),
+          ],
+        );
+      },
     );
   }
 }

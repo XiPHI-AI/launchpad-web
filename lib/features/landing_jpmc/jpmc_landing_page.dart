@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../services/conversation_service.dart';
 import '../../shared/widgets/app_shell.dart';
 import '../../shared/widgets/hub_nav_bar.dart';
@@ -167,21 +168,6 @@ class _JpmcLandingPageState extends State<JpmcLandingPage> {
         children: [
           CustomScrollView(
             slivers: [
-              SliverToBoxAdapter(
-                child: Container(
-                  color: const Color(0xFF1E1B4B),
-                  padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 16),
-                  alignment: Alignment.center,
-                  child: Text(
-                    '🔵 Demo mockup — LaunchPad simulation${isMobile ? '' : ' of the J.P. Morgan startups page by Intelligence Labz'}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xD9C8CDFF),
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
               SliverPersistentHeader(
                 pinned: true,
                 delegate: _StickyHeaderDelegate(

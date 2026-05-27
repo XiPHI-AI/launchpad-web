@@ -1131,6 +1131,14 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
   }
 
   Widget _buildTextField(String label, TextEditingController controller, bool isMandatory, {String? hint, void Function(String)? onChanged, Widget? trailingLabelWidget, bool readOnly = false, List<TextInputFormatter>? inputFormatters}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fieldBorderColor = isDark ? Colors.grey.shade700 : const Color(0xFFD5DAE1);
+    final fieldFillColor = isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF9FAFB);
+    final fieldHintColor = isDark ? Colors.white38 : Colors.grey.shade400;
+    final fieldShadowColor = isDark
+        ? Colors.black.withValues(alpha: 0.32)
+        : const Color(0xFF0F172A).withValues(alpha: 0.09);
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Column(
@@ -1154,36 +1162,48 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
             ],
           ),
           const SizedBox(height: 8),
-          TextFormField(
-            controller: controller,
-            onChanged: readOnly ? null : onChanged,
-            readOnly: readOnly,
-            inputFormatters: inputFormatters,
-            validator: (value) {
-              if (isMandatory && (value == null || value.trim().isEmpty)) {
-                return 'This field is mandatory';
-              }
-              return null;
-            },
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF2C2C2C) : const Color(0xFFF9FAFB),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              hintText: hint,
-              hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: Colors.grey.shade200),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: Colors.grey.shade200),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(
-                  color: AppThemeTokens.buttonPrimary,
-                  width: 1.5,
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(
+                  color: fieldShadowColor,
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: TextFormField(
+              controller: controller,
+              onChanged: readOnly ? null : onChanged,
+              readOnly: readOnly,
+              inputFormatters: inputFormatters,
+              validator: (value) {
+                if (isMandatory && (value == null || value.trim().isEmpty)) {
+                  return 'This field is mandatory';
+                }
+                return null;
+              },
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: fieldFillColor,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                hintText: hint,
+                hintStyle: TextStyle(color: fieldHintColor, fontSize: 14),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: fieldBorderColor),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: fieldBorderColor),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(
+                    color: AppThemeTokens.buttonPrimary,
+                    width: 1.5,
+                  ),
                 ),
               ),
             ),
