@@ -1227,7 +1227,9 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                       title: product.name,
                       description: product.shortDescription ?? product.description,
                       cta: 'By ${product.provider?.companyName ?? 'J.P. Morgan'}',
-                      websiteUrl: product.provider?.websiteUrl,
+                      websiteUrl: (product.signupUrl != null && product.signupUrl!.isNotEmpty)
+                          ? product.signupUrl
+                          : product.provider?.websiteUrl,
                       matchScore: product.matchScore,
                       matchReasoning: product.matchReasoning,
                       productId: product.productId,
@@ -3677,6 +3679,9 @@ class _ProductDetailModalState extends State<_ProductDetailModal> {
     final icon = _getIconForCategory(product.category);
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth >= 1180;
+    final String? productLink = (product.signupUrl != null && product.signupUrl!.isNotEmpty)
+        ? product.signupUrl
+        : product.provider?.websiteUrl;
 
     Widget? matchChip;
     if (product.matchScore != null && product.matchScore! > 0) {
@@ -3813,19 +3818,19 @@ class _ProductDetailModalState extends State<_ProductDetailModal> {
                   ],
                 ],
               ),
-              if ((product.provider != null && product.provider!.websiteUrl != null) || matchChip != null) ...[
+              if (productLink != null || matchChip != null) ...[
                 SizedBox(height: isDesktop ? 4 : 8),
                 Padding(
                   padding: const EdgeInsets.only(left: 58),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      if (product.provider != null && product.provider!.websiteUrl != null)
+                      if (productLink != null)
                         MouseRegion(
                           cursor: SystemMouseCursors.click,
                           child: GestureDetector(
                             onTap: () {
-                              html.window.open(product.provider!.websiteUrl!, '_blank');
+                              html.window.open(productLink, '_blank');
                             },
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
