@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:elevenlabs_agents/elevenlabs_agents.dart';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
@@ -158,6 +159,8 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
   }
 
   ConversationClient _buildConversationClient() {
+    ConversationClient? clientInstance;
+
     final clientTools = <String, ClientTool>{
         'capture_need': CaptureNeedTool(prospectId: widget.prospectId),
         'search_products': SearchProductsTool(prospectId: widget.prospectId),
@@ -165,6 +168,7 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
         'capture_startup_stage': CaptureStartupStageTool(
           prospectId: widget.prospectId,
           onStageCaptured: (newPhase) {
+            if (clientInstance != _client) return;
             if (mounted) {
               setState(() => _activePhase = newPhase);
               if (newPhase >= 2) {
@@ -176,6 +180,7 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
         'advance_phase': AdvancePhaseTool(
           prospectId: widget.prospectId,
           onPhaseAdvanced: (newPhase) {
+            if (clientInstance != _client) return;
             if (mounted) {
               setState(() => _activePhase = newPhase);
             }
@@ -184,6 +189,7 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
         'record_handoff': RecordHandoffTool(prospectId: widget.prospectId),
         'set_response_chips': SetResponseChipsTool(
           onUpdate: (payload) {
+            if (clientInstance != _client) return;
             if (!mounted) {
               print('[chips][ui] onUpdate ignored because widget is not mounted');
               return;
@@ -198,10 +204,14 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
 
     print('[chips][ui] registering client tools: ${clientTools.keys.toList()}');
 
-    return ConversationClient(
+    clientInstance = ConversationClient(
       clientTools: clientTools,
       callbacks: ConversationCallbacks(
         onConnect: ({required conversationId}) {
+          if (clientInstance != _client) {
+            print('[chips][ui] ignoring onConnect from old client');
+            return;
+          }
           print('[chips][ui] onConnect conversationId=$conversationId mode=${_isChatMode ? 'chat' : 'voice'}');
           if (!mounted) return;
           setState(() {
@@ -213,6 +223,10 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
           });
         },
         onDisconnect: (details) {
+          if (clientInstance != _client) {
+            print('[chips][ui] ignoring onDisconnect from old client');
+            return;
+          }
           if (!mounted || _isDisposing) return;
           print(
             '[chips][ui] onDisconnect reason=${details.reason} ended=$_conversationEnded manualEnd=$_manualEndRequested recovering=$_isRecoveringSession',
@@ -235,9 +249,11 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
           _finalizeConversationEnded();
         },
         onStatusChange: ({required status}) {
+          if (clientInstance != _client) return;
           print('[chips][ui] status changed -> $status');
         },
         onModeChange: ({required mode}) {
+          if (clientInstance != _client) return;
           if (!mounted) return;
           setState(() {
             _statusText = mode == ConversationMode.speaking
@@ -246,6 +262,7 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
           });
         },
         onError: (message, [context]) {
+          if (clientInstance != _client) return;
           print('[chips][ui] error message=$message context=$context');
           if (!mounted) return;
           ScaffoldMessenger.of(this.context).showSnackBar(
@@ -255,11 +272,10 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
             ),
           );
         },
-        // ── Transcript callbacks ────────────────────────────────────────────
         onTentativeUserTranscript: ({required transcript, required eventId}) {
+          if (clientInstance != _client) return;
           if (!mounted || transcript.trim().isEmpty) return;
           setState(() {
-            // Update the last tentative user entry, or add one
             if (_transcript.isNotEmpty &&
                 _transcript.last.isUser &&
                 _transcript.last.isTentative) {
@@ -275,9 +291,9 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
           _scrollToBottom();
         },
         onUserTranscript: ({required transcript, required eventId}) {
+          if (clientInstance != _client) return;
           if (!mounted) return;
           setState(() {
-            // Replace the tentative user entry with the finalized one
             if (_transcript.isNotEmpty &&
                 _transcript.last.isUser &&
                 _transcript.last.isTentative) {
@@ -295,6 +311,7 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
           _scrollToBottom();
         },
         onTentativeAgentResponse: ({required response}) {
+          if (clientInstance != _client) return;
           if (!mounted) return;
           final sanitized = _sanitizeAgentMessage(response);
           if (sanitized.isEmpty) return;
@@ -312,8 +329,9 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
           _scrollToBottom();
         },
         onMessage: ({required message, required source}) {
+          if (clientInstance != _client) return;
           if (!mounted) return;
-            if (source == Role.ai) {
+          if (source == Role.ai) {
             final sanitized = _sanitizeAgentMessage(message);
             if (sanitized.isEmpty) return;
             setState(() {
@@ -334,8 +352,11 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
         },
       ),
     )..addListener(() {
+        if (clientInstance != _client) return;
         if (mounted) setState(() {});
       });
+
+    return clientInstance;
   }
 
   bool _isIdentityCategory(String? category) {
@@ -512,11 +533,18 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
     );
 
     try {
-      // NOTE: Do NOT dispose the old client here. The WebSocket was already
-      // closed by the ElevenLabs server (reason=agent). Disposing while the
-      // SDK's internal disconnect handler is still running causes a
-      // DartError ("A ConversationClient was used after being disposed").
-      // The old client will be garbage collected when _client is reassigned.
+      // NOTE: Safely dispose the old client after a brief delay so the SDK's internal
+      // disconnect handler finishes executing first. This prevents the DartError
+      // "A ConversationClient was used after being disposed".
+      if (oldClient != null) {
+        Future.delayed(const Duration(seconds: 2), () {
+          try {
+            oldClient.dispose();
+          } catch (e) {
+            print('[chips][ui] failed to dispose old client: $e');
+          }
+        });
+      }
 
       final tokenResult = await _conversationService.getVoiceToken(
         widget.stageBucket,
@@ -605,11 +633,23 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
 
     try {
       // Server data should override widget data for return-state and welcome text
-      final dynamicVariables = <String, dynamic>{
+      final rawVariables = <String, dynamic>{
         ...widget.dynamicVariables,
         ...?serverDynamicVariables,
       };
-      dynamicVariables['initial_mode'] = _isChatMode ? 'chat' : 'voice';
+      rawVariables['initial_mode'] = _isChatMode ? 'chat' : 'voice';
+
+      // ElevenLabs dynamic_variables only accepts primitive types (String, num, bool) and Lists.
+      // Passing maps/dicts will fail ElevenLabs validation and disconnect the WebSocket.
+      final dynamicVariables = <String, dynamic>{};
+      rawVariables.forEach((key, value) {
+        if (value is Map) {
+          // Serialize Map to JSON string so it is accepted by ElevenLabs as a valid string
+          dynamicVariables[key] = jsonEncode(value);
+        } else {
+          dynamicVariables[key] = value;
+        }
+      });
 
       await _client!.startSession(
         conversationToken: conversationToken ?? widget.conversationToken,
