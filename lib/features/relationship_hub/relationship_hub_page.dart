@@ -3345,7 +3345,7 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
         Text(
           _isReturnVisit
               ? 'Continue where Nova left off'
-              : '~10 min · Nova asks, you answer',
+              : '⏱️ 4-7 min · Nova asks, you answer',
           style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
         ),
         const SizedBox(height: 48),

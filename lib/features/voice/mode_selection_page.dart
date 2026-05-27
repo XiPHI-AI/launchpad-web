@@ -152,7 +152,7 @@ class _ModeSelectionPageState extends State<ModeSelectionPage>
                     mainAxisAlignment: MainAxisAlignment.start,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      const SizedBox(height: 80), // Balanced spacing
+                      const SizedBox(height: 110), // Balanced spacing
                       // Central Pulse Button
                       if (_isFetchingToken)
                         const SizedBox(
@@ -269,7 +269,7 @@ class _ModeSelectionPageState extends State<ModeSelectionPage>
                       Text(
                         _isReturnVisit
                             ? 'Continue where Nova left off'
-                            : '~10 min · Nova asks, you answer',
+                            : '⏱️ 4-7 min · Nova asks, you answer',
                         style: textTheme.bodySmall?.copyWith(
                           color: isDark
                               ? Colors.white54
@@ -277,9 +277,9 @@ class _ModeSelectionPageState extends State<ModeSelectionPage>
                         ),
                       ),
                       
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 24),
                       _buildOrSeparator(isDark),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 20),
 
                       // Continue Chat Button
                       SizedBox(
@@ -313,7 +313,7 @@ class _ModeSelectionPageState extends State<ModeSelectionPage>
                           ),
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 20),
                       _buildOrSeparator(isDark),
                     ],
                   );
