@@ -652,7 +652,7 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Welcome to JPMC Innovation Economy Chat!',
+                        'Welcome to Prospect.ai by Intelligence Labz!',
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppThemeTokens.brandInk),
                       ),
                       const SizedBox(height: 12),

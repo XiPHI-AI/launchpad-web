@@ -178,8 +178,8 @@ class _ModeSelectionPageState extends State<ModeSelectionPage>
                                     _startSession(isChatMode: false),
                             behavior: HitTestBehavior.opaque,
                             child: SizedBox(
-                              height: 180,
-                              width: 180,
+                              height: 200,
+                              width: 200,
                               child: AnimatedBuilder(
                                 animation: _pulseAnimation,
                                 builder: (context, child) {
@@ -194,15 +194,15 @@ class _ModeSelectionPageState extends State<ModeSelectionPage>
                                     children: [
                                       for (int i = 0; i < 3; i++)
                                         Container(
-                                          width: 104 +
-                                              (92 *
+                                          width: 120 +
+                                              (80 *
                                                   ((_pulseAnimation
                                                                .value +
                                                            (i *
                                                                0.33)) %
                                                        1.0)),
-                                          height: 104 +
-                                              (92 *
+                                          height: 120 +
+                                              (80 *
                                                   ((_pulseAnimation
                                                                .value +
                                                            (i *
@@ -225,8 +225,8 @@ class _ModeSelectionPageState extends State<ModeSelectionPage>
                                       AnimatedContainer(
                                         duration: const Duration(
                                             milliseconds: 140),
-                                        width: 104,
-                                        height: 104,
+                                        width: 120,
+                                        height: 120,
                                         decoration: BoxDecoration(
                                           color: triggerColor,
                                           shape: BoxShape.circle,
@@ -243,7 +243,7 @@ class _ModeSelectionPageState extends State<ModeSelectionPage>
                                         child: const Icon(
                                           Icons.graphic_eq_rounded,
                                           color: Colors.white,
-                                          size: 46,
+                                          size: 54,
                                         ),
                                       ),
                                     ],
@@ -255,9 +255,7 @@ class _ModeSelectionPageState extends State<ModeSelectionPage>
                         ),
                       const SizedBox(height: 16),
                       Text(
-                        _isReturnVisit
-                            ? 'Tap the Orb to continue conversation'
-                            : 'Tap the Orb to start conversation',
+                        'Tap the orb to Talk to Nova',
                         style: textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w700,
                           color: isDark
@@ -293,6 +291,18 @@ class _ModeSelectionPageState extends State<ModeSelectionPage>
                               .elevatedButtonTheme
                               .style
                               ?.copyWith(
+                                backgroundColor: WidgetStateProperty.resolveWith((states) {
+                                  if (states.contains(WidgetState.disabled)) {
+                                    return AppThemeTokens.buttonInactive.withOpacity(0.12);
+                                  }
+                                  return const Color(0xFFF3F4F6);
+                                }),
+                                foregroundColor: WidgetStateProperty.resolveWith((states) {
+                                  if (states.contains(WidgetState.disabled)) {
+                                    return AppThemeTokens.buttonInactive.withOpacity(0.38);
+                                  }
+                                  return AppThemeTokens.buttonPrimary;
+                                }),
                                 padding: WidgetStateProperty.all(
                                   const EdgeInsets.symmetric(
                                       horizontal: 48, vertical: 18),
@@ -304,11 +314,9 @@ class _ModeSelectionPageState extends State<ModeSelectionPage>
                                   ),
                                 ),
                               ),
-                          child: Text(
-                            _isReturnVisit
-                                ? 'Continue Chat'
-                                : "Let's Chat",
-                            style: const TextStyle(
+                          child: const Text(
+                            'Chat with Nova',
+                            style: TextStyle(
                                 fontWeight: FontWeight.bold),
                           ),
                         ),

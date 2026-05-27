@@ -3306,8 +3306,8 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
           child: GestureDetector(
             onTap: _isFetchingToken ? null : () => _startSession(isChatMode: false),
             child: SizedBox(
-              height: 180,
-              width: 180,
+              height: 200,
+              width: 200,
               child: AnimatedBuilder(
                 animation: _pulseAnimation,
                 builder: (ctx, child) {
@@ -3317,8 +3317,8 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
                     children: [
                       for (int i = 0; i < 3; i++)
                         Container(
-                          width: 104 + (92 * ((_pulseAnimation.value + (i * 0.33)) % 1.0)),
-                          height: 104 + (92 * ((_pulseAnimation.value + (i * 0.33)) % 1.0)),
+                          width: 120 + (80 * ((_pulseAnimation.value + (i * 0.33)) % 1.0)),
+                          height: 120 + (80 * ((_pulseAnimation.value + (i * 0.33)) % 1.0)),
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(
@@ -3328,8 +3328,8 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
                           ),
                         ),
                       Container(
-                        width: 104,
-                        height: 104,
+                        width: 120,
+                        height: 120,
                         decoration: BoxDecoration(
                           color: color,
                           shape: BoxShape.circle,
@@ -3341,7 +3341,7 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
                             )
                           ],
                         ),
-                        child: const Icon(Icons.graphic_eq_rounded, color: Colors.white, size: 46),
+                        child: const Icon(Icons.graphic_eq_rounded, color: Colors.white, size: 54),
                       ),
                     ],
                   );
@@ -3352,9 +3352,7 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
         ),
         const SizedBox(height: 16),
         Text(
-          _isReturnVisit
-              ? 'Tap the Orb to continue conversation'
-              : 'Tap the Orb to start conversation',
+          'Tap the orb to Talk to Nova',
           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: AppThemeTokens.brandInk),
         ),
         const SizedBox(height: 6),
@@ -3373,12 +3371,14 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
           ElevatedButton(
             onPressed: () => _startSession(isChatMode: true),
             style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFF3F4F6),
+              foregroundColor: AppThemeTokens.buttonPrimary,
               padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 18),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
-            child: Text(
-              _isReturnVisit ? 'Continue Chat' : "Let's Chat",
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+            child: const Text(
+              'Chat with Nova',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
             ),
           ),
       ],
