@@ -1052,8 +1052,8 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
       onEnter: (_) => setState(() => _isVoiceTriggerHovered = true),
       onExit: (_) => setState(() => _isVoiceTriggerHovered = false),
       child: SizedBox(
-        height: 180,
-        width: 180,
+        height: 200,
+        width: 200,
         child: AnimatedBuilder(
           animation: _pulseAnimation,
           builder: (context, child) {
@@ -1066,8 +1066,8 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
                 if (_client?.isSpeaking ?? false)
                   for (int i = 0; i < 3; i++)
                     Container(
-                      width: 104 + (92 * ((_pulseAnimation.value + (i * 0.33)) % 1.0)),
-                      height: 104 + (92 * ((_pulseAnimation.value + (i * 0.33)) % 1.0)),
+                      width: 120 + (80 * ((_pulseAnimation.value + (i * 0.33)) % 1.0)),
+                      height: 120 + (80 * ((_pulseAnimation.value + (i * 0.33)) % 1.0)),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(
@@ -1082,8 +1082,8 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
                   children: [
                     AnimatedContainer(
                       duration: const Duration(milliseconds: 140),
-                      width: 104,
-                      height: 104,
+                      width: 120,
+                      height: 120,
                       decoration: BoxDecoration(
                         color: triggerColor,
                         shape: BoxShape.circle,
@@ -1098,7 +1098,7 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
                       child: const Icon(
                         Icons.graphic_eq_rounded,
                         color: Colors.white,
-                        size: 46,
+                        size: 54,
                       ),
                     ),
                   ],

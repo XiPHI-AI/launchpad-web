@@ -1214,7 +1214,9 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                       title: product.name,
                       description: product.shortDescription ?? product.description,
                       cta: 'By ${product.provider?.companyName ?? 'J.P. Morgan'}',
-                      websiteUrl: product.provider?.websiteUrl,
+                      websiteUrl: (product.signupUrl != null && product.signupUrl!.isNotEmpty)
+                          ? product.signupUrl
+                          : product.provider?.websiteUrl,
                       matchScore: product.matchScore,
                       matchReasoning: product.matchReasoning,
                       productId: product.productId,
@@ -3293,8 +3295,8 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
           child: GestureDetector(
             onTap: _isFetchingToken ? null : () => _startSession(isChatMode: false),
             child: SizedBox(
-              height: 180,
-              width: 180,
+              height: 200,
+              width: 200,
               child: AnimatedBuilder(
                 animation: _pulseAnimation,
                 builder: (ctx, child) {
@@ -3304,8 +3306,8 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
                     children: [
                       for (int i = 0; i < 3; i++)
                         Container(
-                          width: 104 + (92 * ((_pulseAnimation.value + (i * 0.33)) % 1.0)),
-                          height: 104 + (92 * ((_pulseAnimation.value + (i * 0.33)) % 1.0)),
+                          width: 120 + (80 * ((_pulseAnimation.value + (i * 0.33)) % 1.0)),
+                          height: 120 + (80 * ((_pulseAnimation.value + (i * 0.33)) % 1.0)),
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(
@@ -3315,8 +3317,8 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
                           ),
                         ),
                       Container(
-                        width: 104,
-                        height: 104,
+                        width: 120,
+                        height: 120,
                         decoration: BoxDecoration(
                           color: color,
                           shape: BoxShape.circle,
@@ -3328,7 +3330,7 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
                             )
                           ],
                         ),
-                        child: const Icon(Icons.graphic_eq_rounded, color: Colors.white, size: 46),
+                        child: const Icon(Icons.graphic_eq_rounded, color: Colors.white, size: 54),
                       ),
                     ],
                   );
@@ -3339,9 +3341,7 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
         ),
         const SizedBox(height: 16),
         Text(
-          _isReturnVisit
-              ? 'Tap the Orb to continue conversation'
-              : 'Tap the Orb to start conversation',
+          'Tap the orb to Talk to Nova',
           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: AppThemeTokens.brandInk),
         ),
         const SizedBox(height: 6),
@@ -3360,12 +3360,14 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
           ElevatedButton(
             onPressed: () => _startSession(isChatMode: true),
             style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFF3F4F6),
+              foregroundColor: AppThemeTokens.buttonPrimary,
               padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 18),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
-            child: Text(
-              _isReturnVisit ? 'Continue Chat' : "Let's Chat",
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+            child: const Text(
+              'Chat with Nova',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
             ),
           ),
       ],
@@ -3664,6 +3666,9 @@ class _ProductDetailModalState extends State<_ProductDetailModal> {
     final icon = _getIconForCategory(product.category);
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth >= 1180;
+    final String? productLink = (product.signupUrl != null && product.signupUrl!.isNotEmpty)
+        ? product.signupUrl
+        : product.provider?.websiteUrl;
 
     Widget? matchChip;
     if (product.matchScore != null && product.matchScore! > 0) {
@@ -3800,19 +3805,19 @@ class _ProductDetailModalState extends State<_ProductDetailModal> {
                   ],
                 ],
               ),
-              if ((product.provider != null && product.provider!.websiteUrl != null) || matchChip != null) ...[
+              if (productLink != null || matchChip != null) ...[
                 SizedBox(height: isDesktop ? 4 : 8),
                 Padding(
                   padding: const EdgeInsets.only(left: 58),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      if (product.provider != null && product.provider!.websiteUrl != null)
+                      if (productLink != null)
                         MouseRegion(
                           cursor: SystemMouseCursors.click,
                           child: GestureDetector(
                             onTap: () {
-                              html.window.open(product.provider!.websiteUrl!, '_blank');
+                              html.window.open(productLink, '_blank');
                             },
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
