@@ -315,19 +315,6 @@ class _RelationshipHubPageState extends State<RelationshipHubPage> {
           children: [
             Column(
               children: [
-                Container(
-                  color: const Color(0xFF1E1B4B),
-                  padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 16),
-                  alignment: Alignment.center,
-                  child: Text(
-                    '🔵 Demo mockup — LaunchPad simulation${isMobile ? '' : ' of the J.P. Morgan startups page by Intelligence Labz'}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xD9C8CDFF),
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
                 HubNavBar(
                   companyName: _companyName,
                   initials: _initials,

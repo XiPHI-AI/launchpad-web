@@ -15,6 +15,11 @@ class AppThemeTokens {
   static const Color bodyText = Color(0xFF1F2937);
   static const Color subtleText = Color(0xFF6B7280);
   static const Color brandInk = Color(0xFF131F2E);
+
+  static const Color demoBannerBg = Color(0xFF1E1B4B);
+  static const Color demoBannerText = Color(0xD9C8CDFF);
+  static const Color demoBannerBorder = Color(0x1FFFFFFF);
+  static const double demoBannerVerticalPadding = 9;
 }
 
 class AppTheme {
