@@ -14,6 +14,7 @@ class HubNavBar extends StatelessWidget {
   final VoidCallback? onLogout;
   final String activeLabel;
   final bool isHubEnabled;
+  final bool isBankerView;
 
   const HubNavBar({
     super.key,
@@ -26,6 +27,7 @@ class HubNavBar extends StatelessWidget {
     this.onLogout,
     this.activeLabel = 'Hub',
     this.isHubEnabled = false,
+    this.isBankerView = false,
   });
 
   void _showStartFreshDialog(BuildContext context) {
@@ -235,6 +237,25 @@ class HubNavBar extends StatelessWidget {
                     onInteractionsTap!();
                   } : null,
                 ),
+                const SizedBox(height: 8),
+                _mobileMenuLink(
+                  context,
+                  label: isBankerView ? 'Switch to Prospect View' : 'Switch to Banker View',
+                  active: false,
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    if (isBankerView) {
+                      final pid = ProspectIdProvider.of(context);
+                      if (pid != null) {
+                        context.go('/relationship-hub?p=$pid');
+                      } else {
+                        context.go('/');
+                      }
+                    } else {
+                      context.go('/banker');
+                    }
+                  },
+                ),
                 const SizedBox(height: 20),
                 const Divider(color: Colors.white10),
                 const SizedBox(height: 12),
@@ -409,19 +430,29 @@ class HubNavBar extends StatelessWidget {
             child: MouseRegion(
               cursor: SystemMouseCursors.click,
               child: RichText(
-                text: const TextSpan(
-                  style: TextStyle(
+                text: TextSpan(
+                  style: const TextStyle(
                     fontFamily: AppThemeTokens.fontFamily,
                     fontSize: 17,
                     fontWeight: FontWeight.w700,
                     color: Colors.white,
                   ),
                   children: [
-                    TextSpan(text: 'JPMorgan '),
-                    TextSpan(
+                    const TextSpan(text: 'JPMorgan '),
+                    const TextSpan(
                       text: 'Innovation Economy',
                       style: TextStyle(color: AppThemeTokens.goldAccent),
                     ),
+                    if (isBankerView)
+                      const TextSpan(
+                        text: '  ·  Banker view',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF8D8578),
+                          fontStyle: FontStyle.italic,
+                          fontWeight: FontWeight.normal,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -429,36 +460,77 @@ class HubNavBar extends StatelessWidget {
           ),
           const Spacer(),
           if (!isMobile) ...[
-            Wrap(
-              spacing: 8,
-              children: [
-                NavPill(
-                  label: 'Home',
-                  active: activeLabel == 'Home' || activeLabel == 'Dashboard',
-                  onTap: () => context.go('/'),
+            if (isBankerView) ...[
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFC9A84C).withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: const Color(0xFFC9A84C).withOpacity(0.25)),
                 ),
-                NavPill(
-                  label: 'Relationship Hub',
-                  active: activeLabel == 'Relationship Hub',
-                  enabled: isHubEnabled,
-                  onTap: isHubEnabled ? () {
-                    final pid = ProspectIdProvider.of(context);
-                    if (pid != null) {
-                      context.go('/relationship-hub?p=$pid');
-                    } else {
-                      context.go('/relationship-hub');
-                    }
-                  } : null,
+                child: const Text(
+                  'Innovation Banking',
+                  style: TextStyle(
+                    color: AppThemeTokens.goldAccent,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-                NavPill(
-                  label: 'Nova',
-                  active: activeLabel == 'Nova' || activeLabel == 'Nova' || activeLabel == 'Interactions',
-                  onTap: onInteractionsTap,
-                ),
-              ],
-            ),
+              ),
+            ] else ...[
+              Wrap(
+                spacing: 8,
+                children: [
+                  NavPill(
+                    label: 'Home',
+                    active: activeLabel == 'Home' || activeLabel == 'Dashboard',
+                    onTap: () => context.go('/'),
+                  ),
+                  NavPill(
+                    label: 'Relationship Hub',
+                    active: activeLabel == 'Relationship Hub',
+                    enabled: isHubEnabled,
+                    onTap: isHubEnabled ? () {
+                      final pid = ProspectIdProvider.of(context);
+                      if (pid != null) {
+                        context.go('/relationship-hub?p=$pid');
+                      } else {
+                        context.go('/relationship-hub');
+                      }
+                    } : null,
+                  ),
+                  NavPill(
+                    label: 'Nova',
+                    active: activeLabel == 'Nova' || activeLabel == 'Nova' || activeLabel == 'Interactions',
+                    onTap: onInteractionsTap,
+                  ),
+                ],
+              ),
+            ],
             const Spacer(),
             const NavbarNotificationIcon(),
+            const SizedBox(width: 16),
+            IconButton(
+              icon: Icon(
+                isBankerView ? Icons.swap_horiz_rounded : Icons.admin_panel_settings_rounded,
+                color: isBankerView ? AppThemeTokens.goldAccent : Colors.white70,
+                size: 22,
+              ),
+              tooltip: isBankerView ? 'Switch to Prospect View' : 'Switch to Banker View',
+              onPressed: () {
+                if (isBankerView) {
+                  final pid = ProspectIdProvider.of(context);
+                  if (pid != null) {
+                    context.go('/relationship-hub?p=$pid');
+                  } else {
+                    context.go('/');
+                  }
+                } else {
+                  context.go('/banker');
+                }
+              },
+            ),
             const SizedBox(width: 16),
             MouseRegion(
               cursor: SystemMouseCursors.click,

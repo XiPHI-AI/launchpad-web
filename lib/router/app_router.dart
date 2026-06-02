@@ -5,7 +5,7 @@ import '../features/auth/login_page.dart';
 import '../features/auth/signup_page.dart';
 import '../features/landing_jpmc/jpmc_startups_clone_page.dart';
 import '../features/relationship_hub/relationship_hub_page.dart';
-import '../features/stage_selector/stage_selector_page.dart';
+import '../features/banker/banker_crm_page.dart';
 import '../shared/widgets/app_shell.dart';
 
 // ── Route paths ───────────────────────────────────────────────────────────────
@@ -15,6 +15,7 @@ class AppRoutes {
   static const signup = '/signup';
   static const stageSelector = '/stages';
   static const relationshipHub = '/relationship-hub';
+  static const banker = '/banker';
   static const home = '/';
 }
 
@@ -103,12 +104,21 @@ GoRouter createRouter({
         path: AppRoutes.relationshipHub,
         pageBuilder: (context, state) {
           final prospectId = state.uri.queryParameters['p'];
+          final mode = state.uri.queryParameters['mode'];
           return NoTransitionPage(
             child: RelationshipHubPage(
               prospectId: prospectId,
+              mode: mode,
+              dynamicVariables: const {},
             ),
           );
         },
+      ),
+      GoRoute(
+        path: AppRoutes.banker,
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: BankerCrmPage(),
+        ),
       ),
     ],
   );

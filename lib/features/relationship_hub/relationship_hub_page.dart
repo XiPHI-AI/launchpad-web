@@ -4,7 +4,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:html' as html;
 import 'dart:async';
-
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../services/conversation_service.dart';
 import '../../theme/app_theme.dart';
@@ -15,6 +15,7 @@ import '../../shared/widgets/no_transition_page_route.dart';
 import '../../shared/widgets/prospect_id_provider.dart';
 import '../../services/prospect_storage.dart';
 import '../../shared/widgets/typewriter_reveal.dart';
+import '../banker/banker_crm_page.dart';
 
 class _GuideMessage {
   final bool isUser;
@@ -30,21 +31,23 @@ class _GuideMessage {
   });
 }
 
-class RelationshipHubPage extends StatefulWidget {
+class RelationshipHubPage extends ConsumerStatefulWidget {
   final String? prospectId;
+  final String? mode;
   final Map<String, dynamic> dynamicVariables;
 
   const RelationshipHubPage({
     super.key,
     this.prospectId,
+    this.mode,
     this.dynamicVariables = const {},
   });
 
   @override
-  State<RelationshipHubPage> createState() => _RelationshipHubPageState();
+  ConsumerState<RelationshipHubPage> createState() => _RelationshipHubPageState();
 }
 
-class _RelationshipHubPageState extends State<RelationshipHubPage> {
+class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
   final ConversationService _service = ConversationService();
   ProspectInitResult? _prospect;
   bool _loading = false;
@@ -79,6 +82,13 @@ class _RelationshipHubPageState extends State<RelationshipHubPage> {
   }
 
   Future<void> _fetchProducts() async {
+    if (widget.mode == 'banker') {
+      setState(() {
+        _products = [];
+        _loadingProducts = false;
+      });
+      return;
+    }
     if (widget.prospectId != null && ProductCache.get(widget.prospectId!) == null) {
       setState(() => _loadingProducts = true);
     }
@@ -97,6 +107,30 @@ class _RelationshipHubPageState extends State<RelationshipHubPage> {
 
   Future<void> _hydrateProspect() async {
     if (widget.prospectId == null) return;
+    if (widget.mode == 'banker') {
+      final prospects = ref.read(bankerProspectsProvider);
+      final mockP = prospects.firstWhere(
+        (p) => p.id == widget.prospectId,
+        orElse: () => prospects.first,
+      );
+      setState(() {
+        _prospect = ProspectInitResult(
+          prospectId: mockP.id,
+          stageBucket: 'super_agent',
+          agentDisplayName: 'your JPMC AI Advisor',
+          conversationPhase: mockP.id == 'aster' ? 5 : 2,
+          isReturning: true,
+          email: '${mockP.id}@example.com',
+          fullName: '${mockP.name} Founder',
+          companyName: mockP.name,
+          companyStage: mockP.stage,
+          industry: mockP.sector,
+          incorporated: true,
+        );
+        _loading = false;
+      });
+      return;
+    }
     if (ProspectCache.get(widget.prospectId!) == null) {
       setState(() => _loading = true);
     }
@@ -316,11 +350,12 @@ class _RelationshipHubPageState extends State<RelationshipHubPage> {
             Column(
               children: [
                 HubNavBar(
-                  companyName: _companyName,
-                  initials: _initials,
-                  founderName: _founderName,
+                  companyName: widget.mode == 'banker' ? 'Sarah Chen' : _companyName,
+                  initials: widget.mode == 'banker' ? 'SC' : _initials,
+                  founderName: widget.mode == 'banker' ? 'Sarah Chen' : _founderName,
                   activeLabel: 'Relationship Hub',
                   isHubEnabled: true,
+                  isBankerView: widget.mode == 'banker',
                   onProfileTap: () => _showProfileModal(context),
                   onLogout: _handleLogout,
                   onInteractionsTap: () {
@@ -330,7 +365,15 @@ class _RelationshipHubPageState extends State<RelationshipHubPage> {
                   },
                 ),
                 Expanded(
-                  child: mainContent,
+                  child: widget.mode == 'banker'
+                      ? Container(
+                          color: Colors.white,
+                          child: BankerDetailPanel(
+                            prospectId: widget.prospectId ?? 'aster',
+                            showBackButton: true,
+                          ),
+                        )
+                      : mainContent,
                 ),
               ],
             ),
