@@ -36,7 +36,6 @@ class UpdateProspectClassificationResult {
   });
 }
 
-/// Response from the prospect/init endpoint.
 class ProspectInitResult {
   final String prospectId;
   final String stageBucket;
@@ -53,6 +52,7 @@ class ProspectInitResult {
   final String? headcount;
   final Map<String, bool> selectedPrioritiesJson;
   final ProspectClassification? classification;
+  final Map<String, dynamic> profileSnapshot;
 
   ProspectInitResult({
     required this.prospectId,
@@ -70,6 +70,7 @@ class ProspectInitResult {
     this.headcount,
     this.selectedPrioritiesJson = const {},
     this.classification,
+    this.profileSnapshot = const {},
   });
 
   Map<String, dynamic> toDynamicVariables({bool lockProfileFields = false}) {
@@ -366,6 +367,7 @@ class ConversationService {
     String? industry,
     String? headcount,
     Map<String, bool>? selectedPrioritiesJson,
+    Map<String, dynamic>? profileSnapshot,
   }) async {
     await _dio.patch(
       '${ApiConfig.baseUrl}/conversations/prospect/$prospectId/profile',
@@ -380,6 +382,8 @@ class ConversationService {
         if (headcount != null) 'headcount': headcount,
         if (selectedPrioritiesJson != null)
           'selected_priorities_json': selectedPrioritiesJson,
+        if (profileSnapshot != null)
+          'profile_snapshot': profileSnapshot,
       },
     );
   }
@@ -419,6 +423,7 @@ class ConversationService {
             ),
           ) ??
           const {},
+      profileSnapshot: data['profile_snapshot'] as Map<String, dynamic>? ?? const {},
     );
   }
 
@@ -452,6 +457,7 @@ class ConversationService {
             ),
           ) ??
           const {},
+      profileSnapshot: data['profile_snapshot'] as Map<String, dynamic>? ?? const {},
     );
   }
 
@@ -487,6 +493,7 @@ class ConversationService {
             ),
           ) ??
           const {},
+      profileSnapshot: data['profile_snapshot'] as Map<String, dynamic>? ?? const {},
       classification: classificationData == null
           ? null
           : ProspectClassification(
@@ -708,6 +715,68 @@ class ConversationService {
     };
     
     return result;
+  }
+
+  Future<List<ProspectInitResult>> listProspects() async {
+    final response = await _dio.get(
+      '${ApiConfig.baseUrl}/conversations/prospects',
+    );
+    final list = response.data as List;
+    return list.map((item) {
+      final data = item as Map<String, dynamic>;
+      final conversationCount = data['conversation_count'] as int? ?? 0;
+      final classificationData = data['classification'] as Map<String, dynamic>?;
+      return ProspectInitResult(
+        prospectId: data['prospect_id'] as String,
+        stageBucket: data['stage_bucket'] as String? ?? 'super_agent',
+        agentDisplayName:
+            data['agent_display_name'] as String? ?? 'your JPMC AI Advisor',
+        conversationPhase: data['conversation_phase'] as int? ?? 1,
+        isReturning:
+            data['is_returning_user'] as bool? ?? (conversationCount > 0),
+        email: data['email'] as String?,
+        fullName: data['full_name'] as String?,
+        phoneNumber: data['phone_number'] as String?,
+        companyName: data['company_name'] as String?,
+        incorporated: data['incorporated'] as bool? ?? false,
+        companyStage: data['company_stage'] as String?,
+        industry: data['industry'] as String?,
+        headcount: data['headcount'] as String?,
+        selectedPrioritiesJson: (data['selected_priorities_json'] as Map?)?.map(
+              (key, value) => MapEntry(
+                key.toString(),
+                value == true,
+              ),
+            ) ??
+            const {},
+        profileSnapshot: data['profile_snapshot'] as Map<String, dynamic>? ?? const {},
+        classification: classificationData == null
+            ? null
+            : ProspectClassification(
+                inferredStageBucket:
+                    classificationData['inferred_stage_bucket'] as String?,
+                inferredStageConfidence:
+                    (classificationData['inferred_stage_confidence'] as num?)
+                        ?.toDouble(),
+                inferredStageConfidenceLabel:
+                    classificationData['inferred_stage_confidence_label']
+                        as String?,
+                inferredStageReasons:
+                    (classificationData['inferred_stage_reasons'] as List?)
+                            ?.whereType<String>()
+                            .toList() ??
+                        const [],
+                inferredStageUpdatedAt:
+                    classificationData['inferred_stage_updated_at'] as String?,
+                confirmedStageBucket:
+                    classificationData['confirmed_stage_bucket'] as String?,
+                stageSelectionSource:
+                    classificationData['stage_selection_source'] as String?,
+                confirmedStageUpdatedAt:
+                    classificationData['confirmed_stage_updated_at'] as String?,
+              ),
+      );
+    }).toList();
   }
 }
 

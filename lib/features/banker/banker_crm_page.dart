@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../shared/widgets/hub_nav_bar.dart';
 import '../../shared/widgets/prospect_id_provider.dart';
 import '../../services/prospect_storage.dart';
+import '../../services/conversation_service.dart';
 
 // --- COLOR PALETTE FROM HTML ---
 class BankerColors {
@@ -104,6 +105,7 @@ class CrmActivity {
 class CrmProspect {
   final String id;
   final String name;
+  final String email;
   final String sector;
   final String stage;
   final String status;
@@ -126,6 +128,7 @@ class CrmProspect {
   CrmProspect({
     required this.id,
     required this.name,
+    required this.email,
     required this.sector,
     required this.stage,
     required this.status,
@@ -148,6 +151,7 @@ class CrmProspect {
   CrmProspect copyWith({
     String? id,
     String? name,
+    String? email,
     String? sector,
     String? stage,
     String? status,
@@ -169,6 +173,7 @@ class CrmProspect {
     return CrmProspect(
       id: id ?? this.id,
       name: name ?? this.name,
+      email: email ?? this.email,
       sector: sector ?? this.sector,
       stage: stage ?? this.stage,
       status: status ?? this.status,
@@ -194,14 +199,355 @@ class CrmProspect {
 
 class BankerProspectsNotifier extends StateNotifier<List<CrmProspect>> {
   BankerProspectsNotifier() : super([]) {
-    _initializeMockData();
+    loadProspects();
   }
 
-  void _initializeMockData() {
+  Future<void> loadProspects() async {
+    try {
+      final list = await ConversationService().listProspects();
+      state = list.map((r) => _mapToCrmProspect(r)).toList();
+    } catch (e) {
+      print("Failed to load prospects from database: $e");
+      // Fallback: load all mock data so the UI works even if backend fails
+      state = _getMockProspects();
+    }
+  }
+
+  Future<void> _saveProspect(String prospectId) async {
+    final prospectIndex = state.indexWhere((p) => p.id == prospectId);
+    if (prospectIndex == -1) return;
+    final prospect = state[prospectIndex];
+
+    try {
+      await ConversationService().updateProspectProfile(
+        prospectId,
+        email: prospect.email,
+        companyName: prospect.name,
+        industry: prospect.sector,
+        profileSnapshot: _buildSnapshotMap(prospect),
+      );
+    } catch (e) {
+      print("Failed to update prospect $prospectId in DB: $e");
+    }
+  }
+
+  Map<String, dynamic> _buildSnapshotMap(CrmProspect p) {
+    return {
+      'status': p.status,
+      'userEmail': p.email,
+      'notes': p.notes,
+      'docs': p.docs.map((d) => {
+        'name': d.name,
+        'status': d.status,
+      }).toList(),
+      'education': p.education.map((e) => {
+        'title': e.title,
+        'tag': e.tag,
+        'stripeColor': e.stripeColor.value,
+        'status': e.status,
+      }).toList(),
+      'activity': p.activity.map((a) => {
+        'codePoint': a.icon.codePoint,
+        'fontFamily': a.icon.fontFamily,
+        'iconBg': a.iconBg.value,
+        'iconColor': a.iconColor.value,
+        'text': a.text,
+        'time': a.time,
+      }).toList(),
+    };
+  }
+
+  String _mapPhaseToStatus(int phase) {
+    switch (phase) {
+      case 1: return '⏳ Waiting — no chat yet';
+      case 2: return '✨ Intro chat done';
+      case 3: return '💬 In conversation';
+      case 4: return '✓ Fully onboarded';
+      default: return '💬 In conversation';
+    }
+  }
+
+  String _mapCompanyStage(String? stage, String? bucket) {
+    if (stage == null || stage.isEmpty) {
+      if (bucket == null || bucket.isEmpty) return 'Seed';
+      switch (bucket) {
+        case 'pre_seed': return 'Pre-seed';
+        case 'seed': return 'Seed';
+        case 'growth': return 'Growth';
+        case 'early_stage': return 'Early Stage';
+        case 'growth_stage': return 'Growth Stage';
+        case 'late_stage': return 'Late Stage';
+        case 'ipo_beyond': return 'IPO & Beyond';
+        default: return bucket[0].toUpperCase() + bucket.substring(1);
+      }
+    }
+    switch (stage) {
+      case 'pre_seed': return 'Pre-seed';
+      case 'seed': return 'Seed';
+      case 'series_a': return 'Series A';
+      case 'series_b_plus': return 'Series B+';
+      case 'revenue_generating_no_vc': return 'Revenue Generating';
+      default: return stage[0].toUpperCase() + stage.substring(1);
+    }
+  }
+
+  CrmProspect _mapToCrmProspect(ProspectInitResult r) {
+    final snapshot = r.profileSnapshot;
+    final String id = r.prospectId;
+    final String email = r.email ?? '';
+    final String name = r.companyName ?? r.fullName ?? r.email ?? 'Unnamed Prospect';
+    final String sector = r.industry ?? 'Fintech';
+    final String stage = _mapCompanyStage(r.companyStage, r.stageBucket);
+    final String status = snapshot['status'] as String? ?? _mapPhaseToStatus(r.conversationPhase);
+
+    // Try to match a mock prospect for fallback lists
+    CrmProspect? mockMatch;
+    final nameLower = name.toLowerCase();
+    for (final mock in _getMockProspects()) {
+      if (nameLower.contains(mock.name.toLowerCase()) ||
+          mock.name.toLowerCase().contains(nameLower) ||
+          mock.id == id ||
+          (r.email != null && mock.email.toLowerCase() == r.email!.toLowerCase())) {
+        mockMatch = mock;
+        break;
+      }
+    }
+
+    List<CrmDoc> docs = [];
+    if (snapshot.containsKey('docs')) {
+      final docsList = snapshot['docs'] as List;
+      docs = docsList.map((d) => CrmDoc(
+        name: d['name'] as String,
+        status: d['status'] as String,
+      )).toList();
+    } else if (mockMatch != null) {
+      docs = List.from(mockMatch.docs);
+    } else {
+      docs = [
+        CrmDoc(name: 'Investor overview deck', status: 'Needs review'),
+        CrmDoc(name: 'Product one-pager', status: 'Not uploaded'),
+      ];
+    }
+
+    List<CrmEdu> education = [];
+    if (snapshot.containsKey('education')) {
+      final eduList = snapshot['education'] as List;
+      education = eduList.map((e) => CrmEdu(
+        title: e['title'] as String,
+        tag: e['tag'] as String,
+        stripeColor: Color(e['stripeColor'] as int),
+        status: e['status'] as String,
+      )).toList();
+    } else if (mockMatch != null) {
+      education = List.from(mockMatch.education);
+    } else {
+      education = [
+        CrmEdu(
+          title: 'Setting up efficient banking early',
+          tag: 'Guide',
+          stripeColor: BankerColors.gold,
+          status: 'Guide · Not yet read',
+        ),
+      ];
+    }
+
+    List<CrmActivity> activity = [];
+    if (snapshot.containsKey('activity')) {
+      final actList = snapshot['activity'] as List;
+      activity = actList.map((a) => CrmActivity(
+        icon: IconData(
+          a['codePoint'] as int? ?? Icons.chat_bubble_outline_rounded.codePoint,
+          fontFamily: a['fontFamily'] as String? ?? 'MaterialIcons',
+        ),
+        iconBg: Color(a['iconBg'] as int),
+        iconColor: Color(a['iconColor'] as int),
+        text: a['text'] as String,
+        time: a['time'] as String,
+      )).toList();
+    } else if (mockMatch != null) {
+      activity = List.from(mockMatch.activity);
+    } else {
+      activity = [
+        CrmActivity(
+          icon: Icons.input_rounded,
+          iconBg: BankerColors.purpleSoft,
+          iconColor: const Color(0xFF6B21A8),
+          text: 'Prospect entered database',
+          time: 'Today',
+        ),
+      ];
+    }
+
+    String notes = '';
+    if (snapshot.containsKey('notes')) {
+      notes = snapshot['notes'] as String;
+    } else if (mockMatch != null) {
+      notes = mockMatch.notes;
+    }
+
+    int docsReceivedCount = docs.where((d) => d.status == 'Received').length;
+    int docsTotalCount = docs.length;
+    String docsReceivedText = docsTotalCount == 0 ? 'None assigned' : '$docsReceivedCount/$docsTotalCount received';
+
+    int materialsReadCount = education.where((e) => !e.status.contains('Not yet read')).length;
+    int materialsTotalCount = education.length;
+    String materialsReadText = materialsTotalCount == 0 ? '—' : '$materialsReadCount / $materialsTotalCount';
+    String materialsReadSub = materialsTotalCount == 0 
+        ? '' 
+        : (materialsTotalCount - materialsReadCount == 0 ? 'All read ✓' : '${materialsTotalCount - materialsReadCount} unread');
+
+    double profileProgress = 0.20;
+    if (mockMatch != null) {
+      profileProgress = mockMatch.profileProgress;
+    } else {
+      profileProgress = 0.2 + (r.conversationPhase - 1) * 0.25;
+      if (profileProgress > 1.0) profileProgress = 1.0;
+    }
+
+    final initials = name.split(' ').map((e) => e.isNotEmpty ? e[0].toUpperCase() : '').take(2).join();
+    final Color avatarBg = mockMatch?.avatarBg ?? BankerColors.blueSoft;
+    final Color avatarFg = mockMatch?.avatarFg ?? BankerColors.blue;
+
+    return CrmProspect(
+      id: id,
+      name: name,
+      email: email,
+      sector: sector,
+      stage: stage,
+      status: status,
+      profileProgress: profileProgress,
+      docsReceivedText: docsReceivedText,
+      docsReceivedCount: docsReceivedCount,
+      docsTotalCount: docsTotalCount,
+      materialsReadText: materialsReadText,
+      materialsReadSub: materialsReadSub,
+      lastActive: mockMatch?.lastActive ?? 'Today',
+      avatarText: initials.isEmpty ? 'C' : initials,
+      avatarBg: avatarBg,
+      avatarFg: avatarFg,
+      docs: docs,
+      education: education,
+      activity: activity,
+      notes: notes,
+    );
+  }
+
+  void updateNotes(String prospectId, String notes) {
     state = [
+      for (final p in state)
+        if (p.id == prospectId)
+          p.copyWith(notes: notes)
+        else
+          p
+    ];
+    _saveProspect(prospectId);
+  }
+
+  void addDocumentRequest(String prospectId, List<String> docNames) {
+    state = [
+      for (final p in state)
+        if (p.id == prospectId)
+          p.copyWith(
+            docs: [
+              ...p.docs,
+              for (final name in docNames)
+                if (!p.docs.any((d) => d.name == name))
+                  CrmDoc(name: name, status: 'Not uploaded')
+            ],
+            docsReceivedText: '${p.docsReceivedCount}/${p.docsTotalCount + docNames.length} received',
+            docsTotalCount: p.docsTotalCount + docNames.length,
+            activity: [
+              CrmActivity(
+                icon: Icons.insert_drive_file_outlined,
+                iconBg: BankerColors.blueSoft,
+                iconColor: BankerColors.blue,
+                text: 'Requested ${docNames.length} document(s): ${docNames.join(", ")}',
+                time: 'Today',
+              ),
+              ...p.activity,
+            ],
+          )
+        else
+          p
+    ];
+    _saveProspect(prospectId);
+  }
+
+  void removeEducation(String prospectId, String title) {
+    state = [
+      for (final p in state)
+        if (p.id == prospectId)
+          p.copyWith(
+            education: [
+              for (final e in p.education)
+                if (e.title != title) e
+            ]
+          )
+        else
+          p
+    ];
+    _saveProspect(prospectId);
+  }
+
+  void addEducation(String prospectId, List<CrmEdu> eduItems) {
+    state = [
+      for (final p in state)
+        if (p.id == prospectId)
+          p.copyWith(
+            education: [
+              ...p.education,
+              for (final e in eduItems)
+                if (!p.education.any((x) => x.title == e.title)) e
+            ],
+            activity: [
+              CrmActivity(
+                icon: Icons.chrome_reader_mode_rounded,
+                iconBg: BankerColors.greenSoft,
+                iconColor: BankerColors.green,
+                text: 'Assigned ${eduItems.length} education item(s) to learning path',
+                time: 'Today',
+              ),
+              ...p.activity,
+            ]
+          )
+        else
+          p
+    ];
+    _saveProspect(prospectId);
+  }
+
+  void sendMessage(String prospectId, String messageText) {
+    state = [
+      for (final p in state)
+        if (p.id == prospectId)
+          p.copyWith(
+            activity: [
+              CrmActivity(
+                icon: Icons.chat_bubble_outline_rounded,
+                iconBg: BankerColors.blueSoft,
+                iconColor: BankerColors.blue,
+                text: 'Sent message: "$messageText"',
+                time: 'Today',
+              ),
+              ...p.activity,
+            ]
+          )
+        else
+          p
+    ];
+    _saveProspect(prospectId);
+  }
+
+  void addProspect(CrmProspect prospect) {
+    state = [prospect, ...state];
+  }
+
+  List<CrmProspect> _getMockProspects() {
+    return [
       CrmProspect(
         id: 'aster',
         name: 'Aster Labs',
+        email: 'contact@asterlabs.com',
         sector: 'Fintech infrastructure',
         stage: 'Seed',
         status: '📅 Call May 6',
@@ -282,6 +628,7 @@ class BankerProspectsNotifier extends StateNotifier<List<CrmProspect>> {
       CrmProspect(
         id: 'meridian',
         name: 'Meridian Health',
+        email: 'info@meridianhealth.com',
         sector: 'Health tech',
         stage: 'Series A',
         status: '⚠ Awaiting docs',
@@ -328,6 +675,7 @@ class BankerProspectsNotifier extends StateNotifier<List<CrmProspect>> {
       CrmProspect(
         id: 'fold',
         name: 'Fold Dynamics',
+        email: 'hello@folddynamics.com',
         sector: 'Climate tech',
         stage: 'Seed',
         status: '✨ Intro chat done',
@@ -361,6 +709,7 @@ class BankerProspectsNotifier extends StateNotifier<List<CrmProspect>> {
       CrmProspect(
         id: 'arc',
         name: 'Arc Systems',
+        email: 'ops@arcsystems.com',
         sector: 'Defense tech',
         stage: 'Series A',
         status: '💬 In conversation',
@@ -394,6 +743,7 @@ class BankerProspectsNotifier extends StateNotifier<List<CrmProspect>> {
       CrmProspect(
         id: 'lume',
         name: 'Lume Materials',
+        email: 'contact@lumematerials.com',
         sector: 'Deep tech',
         stage: 'Seed',
         status: '✓ Fully onboarded',
@@ -428,6 +778,7 @@ class BankerProspectsNotifier extends StateNotifier<List<CrmProspect>> {
       CrmProspect(
         id: 'echo',
         name: 'Echoway',
+        email: 'hello@echoway.com',
         sector: 'Consumer',
         stage: 'Pre-seed',
         status: '⏳ Waiting — no chat yet',
@@ -457,6 +808,7 @@ class BankerProspectsNotifier extends StateNotifier<List<CrmProspect>> {
       CrmProspect(
         id: 'kova',
         name: 'Kova Bio',
+        email: 'contact@kovabio.com',
         sector: 'Biotech',
         stage: 'Series A',
         status: '💬 In conversation',
@@ -489,111 +841,6 @@ class BankerProspectsNotifier extends StateNotifier<List<CrmProspect>> {
         notes: 'Strong funding runway, check in on clinical trial milestones next month.',
       ),
     ];
-  }
-
-  void updateNotes(String prospectId, String notes) {
-    state = [
-      for (final p in state)
-        if (p.id == prospectId)
-          p.copyWith(notes: notes)
-        else
-          p
-    ];
-  }
-
-  void addDocumentRequest(String prospectId, List<String> docNames) {
-    state = [
-      for (final p in state)
-        if (p.id == prospectId)
-          p.copyWith(
-            docs: [
-              ...p.docs,
-              for (final name in docNames)
-                if (!p.docs.any((d) => d.name == name))
-                  CrmDoc(name: name, status: 'Not uploaded')
-            ],
-            docsReceivedText: '${p.docsReceivedCount}/${p.docsTotalCount + docNames.length} received',
-            docsTotalCount: p.docsTotalCount + docNames.length,
-            activity: [
-              CrmActivity(
-                icon: Icons.insert_drive_file_outlined,
-                iconBg: BankerColors.blueSoft,
-                iconColor: BankerColors.blue,
-                text: 'Requested ${docNames.length} document(s): ${docNames.join(", ")}',
-                time: 'Today',
-              ),
-              ...p.activity,
-            ],
-          )
-        else
-          p
-    ];
-  }
-
-  void removeEducation(String prospectId, String title) {
-    state = [
-      for (final p in state)
-        if (p.id == prospectId)
-          p.copyWith(
-            education: [
-              for (final e in p.education)
-                if (e.title != title) e
-            ]
-          )
-        else
-          p
-    ];
-  }
-
-  void addEducation(String prospectId, List<CrmEdu> eduItems) {
-    state = [
-      for (final p in state)
-        if (p.id == prospectId)
-          p.copyWith(
-            education: [
-              ...p.education,
-              for (final e in eduItems)
-                if (!p.education.any((x) => x.title == e.title)) e
-            ],
-            activity: [
-              CrmActivity(
-                icon: Icons.chrome_reader_mode_rounded,
-                iconBg: BankerColors.greenSoft,
-                iconColor: BankerColors.green,
-                text: 'Assigned ${eduItems.length} education item(s) to learning path',
-                time: 'Today',
-              ),
-              ...p.activity,
-            ]
-          )
-        else
-          p
-    ];
-  }
-
-  void sendMessage(String prospectId, String messageText) {
-    state = [
-      for (final p in state)
-        if (p.id == prospectId)
-          p.copyWith(
-            activity: [
-              CrmActivity(
-                icon: Icons.chat_bubble_outline_rounded,
-                iconBg: BankerColors.blueSoft,
-                iconColor: BankerColors.blue,
-                text: 'Sent message: "$messageText"',
-                time: 'Today',
-              ),
-              ...p.activity,
-            ]
-          )
-        else
-          p
-    ];
-  }
-
-  void addProspect(CrmProspect prospect) {
-    state = [prospect, ...state];
   }
 }
 
@@ -693,7 +940,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
             border: Border(bottom: BorderSide(color: BankerColors.line2)),
           ),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               if (widget.showBackButton) ...[
                 IconButton(
@@ -2520,8 +2767,10 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
 
   void _showAddProspectDialog() {
     final nameCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
     final sectorCtrl = TextEditingController();
     String stage = 'Seed';
+    bool isSaving = false;
 
     showDialog(
       context: context,
@@ -2546,18 +2795,26 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                     TextField(
                       controller: nameCtrl,
                       decoration: const InputDecoration(labelText: 'Company Name', labelStyle: TextStyle(fontSize: 12), border: OutlineInputBorder()),
+                      enabled: !isSaving,
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: emailCtrl,
+                      decoration: const InputDecoration(labelText: 'Email Address', labelStyle: TextStyle(fontSize: 12), border: OutlineInputBorder()),
+                      enabled: !isSaving,
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: sectorCtrl,
                       decoration: const InputDecoration(labelText: 'Sector / Industry', labelStyle: TextStyle(fontSize: 12), border: OutlineInputBorder()),
+                      enabled: !isSaving,
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       value: stage,
                       decoration: const InputDecoration(labelText: 'Funding Stage', labelStyle: TextStyle(fontSize: 12), border: OutlineInputBorder()),
                       items: ['Pre-seed', 'Seed', 'Series A', 'Series B'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                      onChanged: (val) {
+                      onChanged: isSaving ? null : (val) {
                         if (val != null) {
                           setModalState(() => stage = val);
                         }
@@ -2567,46 +2824,100 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel', style: TextStyle(color: BankerColors.muted))),
+                        TextButton(
+                          onPressed: isSaving ? null : () => Navigator.pop(dialogContext), 
+                          child: const Text('Cancel', style: TextStyle(color: BankerColors.muted))
+                        ),
                         const SizedBox(width: 8),
                         ElevatedButton(
-                          onPressed: () {
-                            if (nameCtrl.text.trim().isEmpty) return;
-                            final initials = nameCtrl.text.trim().split(' ').map((e) => e[0].toUpperCase()).take(2).join();
-                            final newProspect = CrmProspect(
-                              id: nameCtrl.text.trim().toLowerCase().replaceAll(' ', '_'),
-                              name: nameCtrl.text.trim(),
-                              sector: sectorCtrl.text.trim().isEmpty ? 'Technology' : sectorCtrl.text.trim(),
-                              stage: stage,
-                              status: '⏳ Waiting — no chat yet',
-                              profileProgress: 0.15,
-                              docsReceivedText: 'None assigned',
-                              docsReceivedCount: 0,
-                              docsTotalCount: 0,
-                              materialsReadText: '—',
-                              materialsReadSub: '',
-                              lastActive: 'Today',
-                              avatarText: initials.isEmpty ? 'C' : initials,
-                              avatarBg: BankerColors.blueSoft,
-                              avatarFg: BankerColors.blue,
-                              docs: [],
-                              education: [],
-                              activity: [
-                                CrmActivity(
-                                  icon: Icons.input_rounded,
-                                  iconBg: BankerColors.purpleSoft,
-                                  iconColor: const Color(0xFF6B21A8),
-                                  text: 'Prospect manually added to system',
-                                  time: 'Today',
-                                ),
-                              ],
-                              notes: '',
-                            );
-                            ref.read(bankerProspectsProvider.notifier).addProspect(newProspect);
-                            Navigator.pop(dialogContext);
+                          onPressed: isSaving ? null : () async {
+                            final name = nameCtrl.text.trim();
+                            final email = emailCtrl.text.trim();
+                            final sector = sectorCtrl.text.trim();
+                            
+                            if (name.isEmpty || email.isEmpty) return;
+
+                            setModalState(() => isSaving = true);
+
+                            String stageBucket = 'super_agent';
+                            String companyStage = 'seed';
+                            if (stage == 'Pre-seed') {
+                              stageBucket = 'pre_seed';
+                              companyStage = 'pre_seed';
+                            } else if (stage == 'Seed') {
+                              stageBucket = 'seed';
+                              companyStage = 'seed';
+                            } else if (stage == 'Series A') {
+                              stageBucket = 'early_stage';
+                              companyStage = 'series_a';
+                            } else if (stage == 'Series B') {
+                              stageBucket = 'growth_stage';
+                              companyStage = 'series_b_plus';
+                            }
+
+                            try {
+                              // Create the prospect in PostgreSQL
+                              final prospectId = await ConversationService().createProspect(stageBucket, email: email);
+                              
+                              final initialSnapshot = {
+                                'status': '⏳ Waiting — no chat yet',
+                                'userEmail': email,
+                              };
+                              
+                              // Update details
+                              await ConversationService().updateProspectProfile(
+                                prospectId,
+                                email: email,
+                                companyName: name,
+                                industry: sector.isEmpty ? 'Technology' : sector,
+                                companyStage: companyStage,
+                                fullName: name,
+                                profileSnapshot: initialSnapshot,
+                              );
+
+                              final initials = name.split(' ').map((e) => e.isNotEmpty ? e[0].toUpperCase() : '').take(2).join();
+                              final newProspect = CrmProspect(
+                                id: prospectId,
+                                name: name,
+                                email: email,
+                                sector: sector.isEmpty ? 'Technology' : sector,
+                                stage: stage,
+                                status: '⏳ Waiting — no chat yet',
+                                profileProgress: 0.15,
+                                docsReceivedText: 'None assigned',
+                                docsReceivedCount: 0,
+                                docsTotalCount: 0,
+                                materialsReadText: '—',
+                                materialsReadSub: '',
+                                lastActive: 'Today',
+                                avatarText: initials.isEmpty ? 'C' : initials,
+                                avatarBg: BankerColors.blueSoft,
+                                avatarFg: BankerColors.blue,
+                                docs: [],
+                                education: [],
+                                activity: [
+                                  CrmActivity(
+                                    icon: Icons.input_rounded,
+                                    iconBg: BankerColors.purpleSoft,
+                                    iconColor: const Color(0xFF6B21A8),
+                                    text: 'Prospect manually added to system',
+                                    time: 'Today',
+                                  ),
+                                ],
+                                notes: '',
+                              );
+
+                              ref.read(bankerProspectsProvider.notifier).addProspect(newProspect);
+                              Navigator.pop(dialogContext);
+                            } catch (e) {
+                              print("Failed to manually create prospect: $e");
+                              setModalState(() => isSaving = false);
+                            }
                           },
                           style: ElevatedButton.styleFrom(backgroundColor: BankerColors.navy, foregroundColor: Colors.white),
-                          child: const Text('Create'),
+                          child: isSaving 
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Text('Create'),
                         ),
                       ],
                     ),
