@@ -1073,10 +1073,10 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
               if (!widget.showBackButton)
                 TextButton(
                   onPressed: () {
-                    context.go('/relationship-hub?p=${prospect.id}');
+                    context.go('/banker/${prospect.id}');
                   },
                   child: const Text(
-                    'Open hub →',
+                    'Open detail →',
                     style: TextStyle(fontSize: 11, color: BankerColors.blue, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -2154,17 +2154,12 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
           initials: 'SC',
           isBankerView: true,
           activeLabel: 'Banker View',
-          onClose: () async {
-            final storage = ProspectStorage();
-            final pid = await storage.getProspectId();
-            if (pid != null) {
-              if (context.mounted) {
-                context.go('/relationship-hub?p=$pid');
-              }
-            } else {
-              if (context.mounted) {
-                context.go('/');
-              }
+          onLogout: () async {
+            ProspectCache.clear();
+            ProductCache.clear();
+            await ProspectStorage().clearProspectId();
+            if (context.mounted) {
+              context.go('/');
             }
           },
         ),
@@ -2481,8 +2476,8 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                       cursor: SystemMouseCursors.click,
                       child: GestureDetector(
                         onTap: () {
-                          // Navigate to individual Relationship Hub for that prospect in Banker Mode
-                          context.go('/relationship-hub?p=${prospect.id}&mode=banker');
+                          // Navigate to individual Banker detail page for that prospect
+                          context.go('/banker/${prospect.id}');
                         },
                         child: Container(
                           height: 52,
@@ -2638,8 +2633,8 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                                           children: [
                                             GestureDetector(
                                               onTap: () {
-                                                // Quick action to hub in banker mode
-                                                context.go('/relationship-hub?p=${prospect.id}&mode=banker');
+                                                // Quick action to individual Banker detail page
+                                                context.go('/banker/${prospect.id}');
                                               },
                                               child: Container(
                                                 padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
@@ -2650,7 +2645,7 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                                             const SizedBox(width: 4),
                                             GestureDetector(
                                               onTap: () {
-                                                context.go('/relationship-hub?p=${prospect.id}&mode=banker');
+                                                context.go('/banker/${prospect.id}');
                                               },
                                               child: Container(
                                                 padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
@@ -2939,4 +2934,50 @@ class _StatItem {
   final Color subColor;
 
   _StatItem({required this.value, required this.label, required this.sub, required this.subColor});
+}
+
+class BankerDetailPage extends ConsumerWidget {
+  final String prospectId;
+
+  const BankerDetailPage({
+    key,
+    required this.prospectId,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF4F2EE),
+      body: SafeArea(
+        child: Column(
+          children: [
+            HubNavBar(
+              companyName: 'Sarah Chen',
+              founderName: 'Sarah Chen',
+              initials: 'SC',
+              isBankerView: true,
+              activeLabel: 'Banker View',
+              onLogout: () async {
+                ProspectCache.clear();
+                ProductCache.clear();
+                await ProspectStorage().clearProspectId();
+                if (context.mounted) {
+                  context.go('/');
+                }
+              },
+            ),
+            Expanded(
+              child: Container(
+                color: Colors.white,
+                child: BankerDetailPanel(
+                  prospectId: prospectId,
+                  showBackButton: true,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

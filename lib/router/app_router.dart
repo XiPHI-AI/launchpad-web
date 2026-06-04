@@ -120,6 +120,17 @@ GoRouter createRouter({
           child: BankerCrmPage(),
         ),
       ),
+      GoRoute(
+        path: '/banker/:prospectId',
+        pageBuilder: (context, state) {
+          final prospectId = state.pathParameters['prospectId'];
+          return NoTransitionPage(
+            child: BankerDetailPage(
+              prospectId: prospectId ?? '',
+            ),
+          );
+        },
+      ),
     ],
   );
 }

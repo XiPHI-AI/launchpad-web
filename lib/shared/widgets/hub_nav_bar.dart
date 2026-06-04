@@ -237,25 +237,7 @@ class HubNavBar extends StatelessWidget {
                     onInteractionsTap!();
                   } : null,
                 ),
-                const SizedBox(height: 8),
-                _mobileMenuLink(
-                  context,
-                  label: isBankerView ? 'Switch to Prospect View' : 'Switch to Banker View',
-                  active: false,
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    if (isBankerView) {
-                      final pid = ProspectIdProvider.of(context);
-                      if (pid != null) {
-                        context.go('/relationship-hub?p=$pid');
-                      } else {
-                        context.go('/');
-                      }
-                    } else {
-                      context.go('/banker');
-                    }
-                  },
-                ),
+
                 const SizedBox(height: 20),
                 const Divider(color: Colors.white10),
                 const SizedBox(height: 12),
@@ -510,27 +492,7 @@ class HubNavBar extends StatelessWidget {
             ],
             const Spacer(),
             const NavbarNotificationIcon(),
-            const SizedBox(width: 16),
-            IconButton(
-              icon: Icon(
-                isBankerView ? Icons.swap_horiz_rounded : Icons.admin_panel_settings_rounded,
-                color: isBankerView ? AppThemeTokens.goldAccent : Colors.white70,
-                size: 22,
-              ),
-              tooltip: isBankerView ? 'Switch to Prospect View' : 'Switch to Banker View',
-              onPressed: () {
-                if (isBankerView) {
-                  final pid = ProspectIdProvider.of(context);
-                  if (pid != null) {
-                    context.go('/relationship-hub?p=$pid');
-                  } else {
-                    context.go('/');
-                  }
-                } else {
-                  context.go('/banker');
-                }
-              },
-            ),
+
             const SizedBox(width: 16),
             MouseRegion(
               cursor: SystemMouseCursors.click,
