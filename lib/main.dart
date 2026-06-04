@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 
 import 'core/auth/auth_provider.dart';
 import 'router/app_router.dart';
@@ -7,6 +8,7 @@ import 'shared/widgets/demo_banner.dart';
 import 'theme/app_theme.dart';
 
 void main() {
+  usePathUrlStrategy();
   runApp(const ProviderScope(child: LaunchPadApp()));
 }
 

@@ -53,6 +53,7 @@ class ProspectInitResult {
   final Map<String, bool> selectedPrioritiesJson;
   final ProspectClassification? classification;
   final Map<String, dynamic> profileSnapshot;
+  final String? bankerId;
 
   ProspectInitResult({
     required this.prospectId,
@@ -71,6 +72,7 @@ class ProspectInitResult {
     this.selectedPrioritiesJson = const {},
     this.classification,
     this.profileSnapshot = const {},
+    this.bankerId,
   });
 
   Map<String, dynamic> toDynamicVariables({bool lockProfileFields = false}) {
@@ -278,6 +280,7 @@ class ProspectFullProfile {
   final int conversationPhase;
   final String? invitationCode;
   final Map<String, dynamic> aiAttributes;
+  final String? bankerId;
 
   const ProspectFullProfile({
     required this.prospectId,
@@ -295,7 +298,31 @@ class ProspectFullProfile {
     this.conversationPhase = 1,
     this.invitationCode,
     this.aiAttributes = const {},
+    this.bankerId,
   });
+}
+
+class Banker {
+  final String bankerId;
+  final String email;
+  final String? name;
+  final String? position;
+
+  const Banker({
+    required this.bankerId,
+    required this.email,
+    this.name,
+    this.position,
+  });
+
+  factory Banker.fromJson(Map<String, dynamic> json) {
+    return Banker(
+      bankerId: json['banker_id'] as String,
+      email: json['email'] as String,
+      name: json['name'] as String?,
+      position: json['position'] as String?,
+    );
+  }
 }
 
 
@@ -424,6 +451,7 @@ class ConversationService {
           ) ??
           const {},
       profileSnapshot: data['profile_snapshot'] as Map<String, dynamic>? ?? const {},
+      bankerId: data['banker_id'] as String?,
     );
   }
 
@@ -458,6 +486,7 @@ class ConversationService {
           ) ??
           const {},
       profileSnapshot: data['profile_snapshot'] as Map<String, dynamic>? ?? const {},
+      bankerId: data['banker_id'] as String?,
     );
   }
 
@@ -494,6 +523,7 @@ class ConversationService {
           ) ??
           const {},
       profileSnapshot: data['profile_snapshot'] as Map<String, dynamic>? ?? const {},
+      bankerId: data['banker_id'] as String?,
       classification: classificationData == null
           ? null
           : ProspectClassification(
@@ -641,6 +671,7 @@ class ConversationService {
                 (key, value) => MapEntry(key.toString(), value),
               ) ??
               const {},
+      bankerId: data['banker_id'] as String?,
     );
   }
 
@@ -750,6 +781,7 @@ class ConversationService {
             ) ??
             const {},
         profileSnapshot: data['profile_snapshot'] as Map<String, dynamic>? ?? const {},
+        bankerId: data['banker_id'] as String?,
         classification: classificationData == null
             ? null
             : ProspectClassification(
@@ -777,6 +809,16 @@ class ConversationService {
               ),
       );
     }).toList();
+  }
+
+  Future<List<Banker>> listBankers() async {
+    final response = await _dio.get(
+      '${ApiConfig.baseUrl}/conversations/bankers',
+    );
+    final list = response.data as List;
+    return list
+        .map((item) => Banker.fromJson(item as Map<String, dynamic>))
+        .toList();
   }
 }
 

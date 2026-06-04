@@ -3,6 +3,7 @@ import '../../theme/app_theme.dart';
 import 'package:go_router/go_router.dart';
 import 'notification_icon.dart';
 import 'prospect_id_provider.dart';
+import '../../services/conversation_service.dart';
 
 class HubNavBar extends StatelessWidget {
   final String companyName;
@@ -16,6 +17,11 @@ class HubNavBar extends StatelessWidget {
   final bool isHubEnabled;
   final bool isBankerView;
 
+  // Banker selection dropdown options
+  final List<Banker>? bankers;
+  final Banker? activeBanker;
+  final ValueChanged<Banker>? onBankerSelected;
+
   const HubNavBar({
     super.key,
     required this.companyName,
@@ -28,6 +34,9 @@ class HubNavBar extends StatelessWidget {
     this.activeLabel = 'Hub',
     this.isHubEnabled = false,
     this.isBankerView = false,
+    this.bankers,
+    this.activeBanker,
+    this.onBankerSelected,
   });
 
   void _showStartFreshDialog(BuildContext context) {
@@ -299,7 +308,7 @@ class HubNavBar extends StatelessWidget {
                 const SizedBox(height: 24),
                 Row(
                   children: [
-                    if (onLogout != null)
+                    if (onLogout != null && !isBankerView)
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: () {
@@ -318,7 +327,7 @@ class HubNavBar extends StatelessWidget {
                           ),
                         ),
                       ),
-                    if (onLogout != null && onClose != null) const SizedBox(width: 12),
+                    if (onLogout != null && !isBankerView && onClose != null) const SizedBox(width: 12),
                     if (onClose != null)
                       Expanded(
                         child: ElevatedButton.icon(
@@ -494,49 +503,171 @@ class HubNavBar extends StatelessWidget {
             const NavbarNotificationIcon(),
 
             const SizedBox(width: 16),
-            MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: GestureDetector(
-                onTap: onProfileTap,
-                behavior: HitTestBehavior.opaque,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF223A56),
-                        borderRadius: BorderRadius.circular(999),
-                        border:
-                            Border.all(color: const Color(0xFFB99C4C), width: 1),
+            if (isBankerView && bankers != null && bankers!.isNotEmpty)
+              PopupMenuButton<Banker>(
+                offset: const Offset(0, 46),
+                color: AppThemeTokens.modalHeader,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: Color(0xFF2E4560), width: 1),
+                ),
+                onSelected: onBankerSelected,
+                itemBuilder: (context) => bankers!.map((b) {
+                  final isSelected = activeBanker?.bankerId == b.bankerId;
+                  final bInitials = b.name != null
+                      ? b.name!.split(' ').map((e) => e.isNotEmpty ? e[0].toUpperCase() : '').take(2).join()
+                      : 'B';
+                  return PopupMenuItem<Banker>(
+                    value: b,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: isSelected ? const Color(0xFFB99C4C).withOpacity(0.2) : const Color(0xFF223A56),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: isSelected ? const Color(0xFFB99C4C) : const Color(0xFF5A6B80),
+                                width: 1,
+                              ),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              bInitials,
+                              style: TextStyle(
+                                color: isSelected ? AppThemeTokens.goldAccent : Colors.white70,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  b.name ?? b.email,
+                                  style: TextStyle(
+                                    color: isSelected ? AppThemeTokens.goldAccent : Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                  ),
+                                ),
+                                if (b.position != null)
+                                  Text(
+                                    b.position!,
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.5),
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          if (isSelected)
+                            const Icon(
+                              Icons.check_rounded,
+                              color: AppThemeTokens.goldAccent,
+                              size: 16,
+                            ),
+                        ],
                       ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        initials,
-                        style: const TextStyle(
-                          color: AppThemeTokens.goldAccent,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
+                    ),
+                  );
+                }).toList(),
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF223A56),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: const Color(0xFFB99C4C), width: 1),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          initials,
+                          style: const TextStyle(
+                            color: AppThemeTokens.goldAccent,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      companyName.isNotEmpty && companyName != 'Launchpad'
-                          ? companyName
-                          : founderName.split(' ').first,
-                      style: const TextStyle(
-                        color: Color(0xFFE2E8F0),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
+                      const SizedBox(width: 12),
+                      Text(
+                        companyName.isNotEmpty && companyName != 'Launchpad'
+                            ? companyName
+                            : founderName.split(' ').first,
+                        style: const TextStyle(
+                          color: Color(0xFFE2E8F0),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: Colors.white70,
+                        size: 18,
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  onTap: onProfileTap,
+                  behavior: HitTestBehavior.opaque,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF223A56),
+                          borderRadius: BorderRadius.circular(999),
+                          border:
+                              Border.all(color: const Color(0xFFB99C4C), width: 1),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          initials,
+                          style: const TextStyle(
+                            color: AppThemeTokens.goldAccent,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        companyName.isNotEmpty && companyName != 'Launchpad'
+                            ? companyName
+                            : founderName.split(' ').first,
+                        style: const TextStyle(
+                          color: Color(0xFFE2E8F0),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            if (onLogout != null) ...[
+            if (onLogout != null && !isBankerView) ...[
               const SizedBox(width: 16),
               GestureDetector(
                 onTap: () => _showStartFreshDialog(context),

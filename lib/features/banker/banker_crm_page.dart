@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../shared/widgets/hub_nav_bar.dart';
 import '../../shared/widgets/prospect_id_provider.dart';
 import '../../services/prospect_storage.dart';
 import '../../services/conversation_service.dart';
+import '../relationship_hub/relationship_hub_page.dart';
 
 // --- COLOR PALETTE FROM HTML ---
 class BankerColors {
@@ -119,6 +121,7 @@ class CrmProspect {
   final String avatarText;
   final Color avatarBg;
   final Color avatarFg;
+  final String? bankerId;
   
   final List<CrmDoc> docs;
   final List<CrmEdu> education;
@@ -146,6 +149,7 @@ class CrmProspect {
     required this.education,
     required this.activity,
     required this.notes,
+    this.bankerId,
   });
 
   CrmProspect copyWith({
@@ -169,6 +173,7 @@ class CrmProspect {
     List<CrmEdu>? education,
     List<CrmActivity>? activity,
     String? notes,
+    String? bankerId,
   }) {
     return CrmProspect(
       id: id ?? this.id,
@@ -191,6 +196,7 @@ class CrmProspect {
       education: education ?? List.from(this.education),
       activity: activity ?? List.from(this.activity),
       notes: notes ?? this.notes,
+      bankerId: bankerId ?? this.bankerId,
     );
   }
 }
@@ -429,6 +435,7 @@ class BankerProspectsNotifier extends StateNotifier<List<CrmProspect>> {
       education: education,
       activity: activity,
       notes: notes,
+      bankerId: r.bankerId,
     );
   }
 
@@ -844,6 +851,14 @@ class BankerProspectsNotifier extends StateNotifier<List<CrmProspect>> {
   }
 }
 
+final bankersProvider = FutureProvider<List<Banker>>((ref) async {
+  return await ConversationService().listBankers();
+});
+
+final activeBankerProvider = StateProvider<Banker?>((ref) {
+  return null;
+});
+
 final bankerProspectsProvider = StateNotifierProvider<BankerProspectsNotifier, List<CrmProspect>>((ref) {
   return BankerProspectsNotifier();
 });
@@ -869,6 +884,45 @@ class BankerDetailPanel extends ConsumerStatefulWidget {
 class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
   String _activeTab = 'assign';
   final TextEditingController _notesController = TextEditingController();
+  List<ProductPublic> _products = [];
+  bool _loadingProducts = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchProducts();
+  }
+
+  @override
+  void didUpdateWidget(covariant BankerDetailPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.prospectId != widget.prospectId) {
+      _fetchProducts();
+    }
+  }
+
+  Future<void> _fetchProducts() async {
+    if (!mounted) return;
+    setState(() {
+      _loadingProducts = true;
+    });
+    try {
+      final products = await ConversationService().listProducts(prospectId: widget.prospectId);
+      if (mounted) {
+        setState(() {
+          _products = products;
+          _loadingProducts = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching products for banker panel: $e');
+      if (mounted) {
+        setState(() {
+          _loadingProducts = false;
+        });
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -1092,7 +1146,8 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
           child: Row(
             children: [
               _buildTabButton('Next steps', 'assign'),
-              _buildTabButton('Activity', 'activity'),
+              _buildTabButton('Recommended products', 'products'),
+              _buildTabButton('Suggested questions', 'questions'),
               _buildTabButton('Notes', 'notes'),
             ],
           ),
@@ -1149,8 +1204,10 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
     switch (_activeTab) {
       case 'assign':
         return _buildNextStepsTab(prospect);
-      case 'activity':
-        return _buildActivityTab(prospect);
+      case 'products':
+        return _buildRecommendedProductsTab(prospect);
+      case 'questions':
+        return _buildSuggestedQuestionsTab(prospect);
       case 'notes':
         return _buildNotesTab(prospect);
       default:
@@ -1435,43 +1492,190 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
     );
   }
 
-  Widget _buildActivityTab(CrmProspect prospect) {
+  IconData _getIconForCategory(String category) {
+    final c = category.toLowerCase();
+    if (c.contains('payment')) return Icons.payments_outlined;
+    if (c.contains('treasury')) return Icons.monitor_heart_outlined;
+    if (c.contains('card')) return Icons.credit_card_outlined;
+    if (c.contains('international') || c.contains('cross-currency')) {
+      return Icons.public_outlined;
+    }
+    if (c.contains('banking')) return Icons.account_balance_wallet_outlined;
+    if (c.contains('credit') || c.contains('lending')) {
+      return Icons.attach_money_rounded;
+    }
+    return Icons.category_outlined;
+  }
+
+  Color _getTintForCategory(String category) {
+    final c = category.toLowerCase();
+    if (c.contains('payment')) return const Color(0xFF7C3AED);
+    if (c.contains('treasury')) return const Color(0xFF1D9E75);
+    if (c.contains('card')) return const Color(0xFF1A7B99);
+    if (c.contains('international') || c.contains('cross-currency')) {
+      return const Color(0xFF0891B2);
+    }
+    if (c.contains('banking')) return const Color(0xFF1A7B99);
+    if (c.contains('credit') || c.contains('lending')) {
+      return const Color(0xFF996715);
+    }
+    return const Color(0xFF64748B);
+  }
+
+  Widget _buildRecommendedProductsTab(CrmProspect prospect) {
+    if (_loadingProducts) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24.0),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+    if (_products.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Text(
+          'No recommended products found for this prospect.',
+          style: TextStyle(fontSize: 11, color: BankerColors.muted),
+        ),
+      );
+    }
+
+    final sorted = List<ProductPublic>.from(_products)
+      ..sort((a, b) => (b.matchScore ?? 0).compareTo(a.matchScore ?? 0));
+
     return Column(
-      children: prospect.activity.map((act) {
-        return Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: BankerColors.line, width: 1)),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Recommended J.P. Morgan products matching stage & sector fit:',
+          style: TextStyle(fontSize: 11, color: BankerColors.muted2),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: sorted.map((product) {
+            final icon = _getIconForCategory(product.category);
+            final tint = _getTintForCategory(product.category);
+
+            return SizedBox(
+              width: 320.0,
+              child: ProductCard(
+                icon: icon,
+                tint: tint,
+                iconColor: tint,
+                title: product.name,
+                description: product.shortDescription ?? product.description,
+                cta: 'By ${product.provider?.companyName ?? 'J.P. Morgan'}',
+                websiteUrl: (product.signupUrl != null && product.signupUrl!.isNotEmpty)
+                    ? product.signupUrl
+                    : product.provider?.websiteUrl,
+                matchScore: product.matchScore,
+                matchReasoning: product.matchReasoning,
+                productId: product.productId,
+                prospectId: prospect.id,
+                onTap: () {
+                  final screenWidth = MediaQuery.of(context).size.width;
+                  final isDesktop = screenWidth >= 1180;
+                  if (isDesktop) {
+                    showDialog(
+                      context: context,
+                      builder: (_) => ProductDetailModal(
+                        product: product,
+                        prospectId: prospect.id,
+                      ),
+                    );
+                  } else {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => ProductDetailModal(
+                        product: product,
+                        prospectId: prospect.id,
+                      ),
+                    );
+                  }
+                },
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSuggestedQuestionsTab(CrmProspect prospect) {
+    final List<String> questions = [
+      'What is your primary focus for cash runway extension over the next 12 months?',
+      'Are you planning any international expansion, foreign hiring, or multi-currency operations in the near term?',
+      'Which payment processors/gateways do you currently use, and what are your key transaction fee pain points?',
+      'How does your current capital structure look, and are you considering venture debt to complement your next equity round?',
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Recommended questions to ask during the relationship call:',
+          style: TextStyle(fontSize: 11, color: BankerColors.muted2),
+        ),
+        const SizedBox(height: 12),
+        ...questions.map((q) => Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: BankerColors.cream,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: BankerColors.line2),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 22,
-                height: 22,
-                decoration: BoxDecoration(
-                  color: act.iconBg,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                alignment: Alignment.center,
-                child: Icon(act.icon, size: 11, color: act.iconColor),
+              const Icon(
+                Icons.help_outline_rounded,
+                size: 16,
+                color: BankerColors.blue,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  act.text,
-                  style: const TextStyle(fontSize: 11, color: BankerColors.ink, height: 1.45),
+                  q,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: BankerColors.ink,
+                    height: 1.4,
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
-              Text(
-                act.time,
-                style: const TextStyle(fontSize: 10, color: BankerColors.muted2),
+              Tooltip(
+                message: 'Copy to clipboard',
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: () {
+                      Clipboard.setData(ClipboardData(text: q));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Question copied to clipboard!'),
+                          duration: Duration(seconds: 1),
+                        ),
+                      );
+                    },
+                    child: const Icon(
+                      Icons.copy_rounded,
+                      size: 16,
+                      color: BankerColors.muted2,
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
-        );
-      }).toList(),
+        )),
+      ],
     );
   }
 
@@ -2135,7 +2339,33 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
     final isMobile = width < 1000;
     
     // Read from Riverpod Provider
-    final prospects = ref.watch(bankerProspectsProvider);
+    final bankersAsync = ref.watch(bankersProvider);
+    final activeBanker = ref.watch(activeBankerProvider);
+    final allProspects = ref.watch(bankerProspectsProvider);
+
+    // Auto-select banker with persistence
+    bankersAsync.whenData((bankers) {
+      if (activeBanker == null && bankers.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          final savedId = await ProspectStorage().getActiveBankerId();
+          if (savedId != null) {
+            final savedBanker = bankers.firstWhere(
+              (b) => b.bankerId == savedId,
+              orElse: () => bankers.first,
+            );
+            ref.read(activeBankerProvider.notifier).state = savedBanker;
+          } else {
+            ref.read(activeBankerProvider.notifier).state = bankers.first;
+          }
+        });
+      }
+    });
+
+    // Filter prospects by active banker
+    final prospects = allProspects.where((p) {
+      if (activeBanker == null) return true;
+      return p.bankerId == activeBanker.bankerId;
+    }).toList();
 
     // Dynamic stats computations
     final activeCount = prospects.length;
@@ -2144,16 +2374,34 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
     final awaitingDocsCount = prospects.where((p) => p.status.contains('Awaiting docs')).length;
     final onboardedCount = prospects.where((p) => p.status.contains('Fully onboarded')).length;
 
+    final bankerName = activeBanker?.name ??
+        (bankersAsync.value?.isNotEmpty == true
+            ? (bankersAsync.value!.first.name ?? 'Banker')
+            : 'Loading...');
+    final activeName = activeBanker?.name ?? 
+        (bankersAsync.value?.isNotEmpty == true 
+            ? (bankersAsync.value!.first.name ?? 'Banker') 
+            : 'Loading...');
+    final initials = activeName != 'Loading...'
+        ? activeName.split(' ').map((e) => e.isNotEmpty ? e[0].toUpperCase() : '').take(2).join()
+        : '...';
+
     return Scaffold(
       backgroundColor: const Color(0xFFF4F2EE),
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(74),
         child: HubNavBar(
-          companyName: 'Sarah Chen',
-          founderName: 'Sarah Chen',
-          initials: 'SC',
+          companyName: bankerName,
+          founderName: bankerName,
+          initials: initials,
           isBankerView: true,
           activeLabel: 'Banker View',
+          bankers: bankersAsync.value ?? [],
+          activeBanker: activeBanker,
+          onBankerSelected: (banker) {
+            ref.read(activeBankerProvider.notifier).state = banker;
+            ProspectStorage().saveActiveBankerId(banker.bankerId);
+          },
           onLogout: () async {
             ProspectCache.clear();
             ProductCache.clear();
@@ -2946,17 +3194,89 @@ class BankerDetailPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final bankersAsync = ref.watch(bankersProvider);
+    final activeBanker = ref.watch(activeBankerProvider);
+
+    // Auto-select banker with persistence
+    bankersAsync.whenData((bankers) {
+      if (activeBanker == null && bankers.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          final savedId = await ProspectStorage().getActiveBankerId();
+          if (savedId != null) {
+            final savedBanker = bankers.firstWhere(
+              (b) => b.bankerId == savedId,
+              orElse: () => bankers.first,
+            );
+            ref.read(activeBankerProvider.notifier).state = savedBanker;
+          } else {
+            ref.read(activeBankerProvider.notifier).state = bankers.first;
+          }
+        });
+      }
+    });
+
+    final bankerName = activeBanker?.name ??
+        (bankersAsync.value?.isNotEmpty == true
+            ? (bankersAsync.value!.first.name ?? 'Banker')
+            : 'Loading...');
+    final activeName = activeBanker?.name ?? 
+        (bankersAsync.value?.isNotEmpty == true 
+            ? (bankersAsync.value!.first.name ?? 'Banker') 
+            : 'Loading...');
+    final initials = activeName != 'Loading...'
+        ? activeName.split(' ').map((e) => e.isNotEmpty ? e[0].toUpperCase() : '').take(2).join()
+        : '...';
+
+    final prospects = ref.watch(bankerProspectsProvider);
+    // Find matching prospect
+    final prospect = prospects.firstWhere(
+      (p) => p.id == prospectId,
+      orElse: () => CrmProspect(
+        id: prospectId,
+        name: 'Prospect',
+        email: '',
+        sector: 'Fintech',
+        stage: 'Seed',
+        status: 'In conversation',
+        profileProgress: 0.5,
+        docsReceivedText: '0/2 received',
+        docsReceivedCount: 0,
+        docsTotalCount: 2,
+        materialsReadText: '0 / 1',
+        materialsReadSub: '1 unread',
+        lastActive: 'Today',
+        avatarText: 'P',
+        avatarBg: Colors.blue,
+        avatarFg: Colors.white,
+        docs: [],
+        education: [],
+        activity: [],
+        notes: '',
+      ),
+    );
+
+    final width = MediaQuery.of(context).size.width;
+    final isMobile = width < 1000;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF4F2EE),
       body: SafeArea(
         child: Column(
           children: [
             HubNavBar(
-              companyName: 'Sarah Chen',
-              founderName: 'Sarah Chen',
-              initials: 'SC',
+              companyName: bankerName,
+              founderName: bankerName,
+              initials: initials,
               isBankerView: true,
               activeLabel: 'Banker View',
+              bankers: bankersAsync.value ?? [],
+              activeBanker: activeBanker,
+              onBankerSelected: (banker) {
+                ref.read(activeBankerProvider.notifier).state = banker;
+                ProspectStorage().saveActiveBankerId(banker.bankerId);
+                // Go back to the main banker dashboard
+                context.go('/banker');
+              },
               onLogout: () async {
                 ProspectCache.clear();
                 ProductCache.clear();
@@ -2966,14 +3286,66 @@ class BankerDetailPage extends ConsumerWidget {
                 }
               },
             ),
+            const NotificationsSection(),
             Expanded(
-              child: Container(
-                color: Colors.white,
-                child: BankerDetailPanel(
-                  prospectId: prospectId,
-                  showBackButton: true,
-                ),
-              ),
+              child: isMobile
+                  ? SingleChildScrollView(
+                      child: Column(
+                        children: [
+                          Container(
+                            color: Colors.white,
+                            child: BankerDetailPanel(
+                              prospectId: prospectId,
+                              showBackButton: true,
+                            ),
+                          ),
+                          const Divider(height: 1, color: Color(0xFFE7DCC8)),
+                          SizedBox(
+                            height: 600,
+                            child: AiGuidePanel(
+                              prospectId: prospectId,
+                              founderName: prospect.name,
+                              companyName: prospect.name,
+                              industry: prospect.sector,
+                              stageLabel: prospect.stage,
+                              priorities: const [],
+                              customActionLabel: 'Prospect Chats',
+                              onCustomActionTap: () {},
+                              bankerName: bankerName,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          child: Container(
+                            color: Colors.white,
+                            child: BankerDetailPanel(
+                              prospectId: prospectId,
+                              showBackButton: true,
+                            ),
+                          ),
+                        ),
+                        const VerticalDivider(width: 1, color: Color(0xFFE7DCC8)),
+                        SizedBox(
+                          width: 420,
+                          child: AiGuidePanel(
+                            prospectId: prospectId,
+                            founderName: prospect.name,
+                            companyName: prospect.name,
+                            industry: prospect.sector,
+                            stageLabel: prospect.stage,
+                            priorities: const [],
+                            customActionLabel: 'Prospect Chats',
+                            onCustomActionTap: () {},
+                            bankerName: bankerName,
+                          ),
+                        ),
+                      ],
+                    ),
             ),
           ],
         ),

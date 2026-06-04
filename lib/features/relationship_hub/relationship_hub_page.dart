@@ -15,7 +15,6 @@ import '../../shared/widgets/no_transition_page_route.dart';
 import '../../shared/widgets/prospect_id_provider.dart';
 import '../../services/prospect_storage.dart';
 import '../../shared/widgets/typewriter_reveal.dart';
-import '../banker/banker_crm_page.dart';
 
 class _GuideMessage {
   final bool isUser;
@@ -108,23 +107,19 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
   Future<void> _hydrateProspect() async {
     if (widget.prospectId == null) return;
     if (widget.mode == 'banker') {
-      final prospects = ref.read(bankerProspectsProvider);
-      final mockP = prospects.firstWhere(
-        (p) => p.id == widget.prospectId,
-        orElse: () => prospects.first,
-      );
+      final String name = widget.prospectId ?? 'Aster';
       setState(() {
         _prospect = ProspectInitResult(
-          prospectId: mockP.id,
+          prospectId: widget.prospectId ?? 'aster',
           stageBucket: 'super_agent',
           agentDisplayName: 'your JPMC AI Advisor',
-          conversationPhase: mockP.id == 'aster' ? 5 : 2,
+          conversationPhase: name.toLowerCase() == 'aster' ? 5 : 2,
           isReturning: true,
-          email: '${mockP.id}@example.com',
-          fullName: '${mockP.name} Founder',
-          companyName: mockP.name,
-          companyStage: mockP.stage,
-          industry: mockP.sector,
+          email: '${widget.prospectId ?? "aster"}@example.com',
+          fullName: '$name Founder',
+          companyName: name,
+          companyStage: 'seed',
+          industry: 'Technology',
           incorporated: true,
         );
         _loading = false;
@@ -365,15 +360,7 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
                   },
                 ),
                 Expanded(
-                  child: widget.mode == 'banker'
-                      ? Container(
-                          color: Colors.white,
-                          child: BankerDetailPanel(
-                            prospectId: widget.prospectId ?? 'aster',
-                            showBackButton: true,
-                          ),
-                        )
-                      : mainContent,
+                  child: mainContent,
                 ),
               ],
             ),
@@ -1411,6 +1398,9 @@ class _AiGuidePanel extends StatefulWidget {
   final String stageLabel;
   final List<String> priorities;
   final VoidCallback? onClose;
+  final String? customActionLabel;
+  final VoidCallback? onCustomActionTap;
+  final String? bankerName;
 
   const _AiGuidePanel({
     this.prospectId,
@@ -1420,6 +1410,9 @@ class _AiGuidePanel extends StatefulWidget {
     required this.stageLabel,
     required this.priorities,
     this.onClose,
+    this.customActionLabel,
+    this.onCustomActionTap,
+    this.bankerName,
   });
 
   @override
@@ -1433,11 +1426,16 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
   final ScrollController _historyScrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
   bool _sending = false;
+  String get _bankerFirstName {
+    final name = widget.bankerName ?? 'Sarah Chen';
+    return name.split(' ').first;
+  }
+
   late final List<_GuideMessage> _messages = [
     _GuideMessage(
       isUser: false,
       text:
-          "I have context from ${widget.founderName}'s profile and the materials in ${widget.companyName}'s learning path. Ask me anything about the next meeting, Sarah's notes, or what matters most right now.",
+          "I have context from ${widget.founderName}'s profile and the materials in ${widget.companyName}'s learning path. Ask me anything about the next meeting, $_bankerFirstName's notes, or what matters most right now.",
     ),
   ];
 
@@ -1721,7 +1719,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
           if (!_viewingHistory) ...[
             const SizedBox(width: 12),
             GestureDetector(
-              onTap: _openReturnLink,
+              onTap: widget.onCustomActionTap ?? _openReturnLink,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 decoration: BoxDecoration(
@@ -1730,12 +1728,18 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.open_in_new_rounded, size: 13, color: Colors.white),
-                    SizedBox(width: 6),
+                  children: [
+                    Icon(
+                      widget.customActionLabel != null
+                          ? Icons.chat_bubble_outline_rounded
+                          : Icons.open_in_new_rounded,
+                      size: 13,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(width: 6),
                     Text(
-                      'Talk to Nova',
-                      style: TextStyle(
+                      widget.customActionLabel ?? 'Talk to Nova',
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
@@ -2176,86 +2180,79 @@ class _NotificationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A7B99).withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFB6D4F4)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: iconBg,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: iconColor, size: 18),
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onDismiss,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: iconBg.withValues(alpha: 0.45),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: iconColor.withValues(alpha: 0.18)),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text.rich(
-                  TextSpan(
-                    style: const TextStyle(
-                      color: Color(0xFF202020),
-                      fontSize: 14,
-                      height: 1.45,
-                    ),
-                    children: [
-                      TextSpan(
-                        text: '$title ',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      TextSpan(text: '— $message'),
-                    ],
-                  ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                const SizedBox(height: 6),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Icon(icon, color: iconColor, size: 16),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
+                    Text.rich(
+                      TextSpan(
+                        style: const TextStyle(
+                          color: Color(0xFF202020),
+                          fontSize: 13,
+                          height: 1.35,
+                        ),
+                        children: [
+                          TextSpan(
+                            text: '$title ',
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          TextSpan(text: '— $message'),
+                        ],
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
                     Text(
                       footer,
                       style: const TextStyle(
                         color: Color(0xFF8D8578),
-                        fontSize: 12,
+                        fontSize: 11,
                       ),
                     ),
-                    if (onDismiss != null)
-                      MouseRegion(
-                        cursor: SystemMouseCursors.click,
-                        child: GestureDetector(
-                          onTap: onDismiss,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1A7B99).withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(color: const Color(0xFF1A7B99).withValues(alpha: 0.2)),
-                            ),
-                            child: const Text(
-                              'Mark as read',
-                              style: TextStyle(
-                                color: Color(0xFF1A7B99),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
                   ],
                 ),
+              ),
+              if (onDismiss != null) ...[
+                const SizedBox(width: 12),
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF0A4A8A),
+                    shape: BoxShape.circle,
+                  ),
+                ),
               ],
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -5372,6 +5369,132 @@ class _PrepCallModal extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class AiGuidePanel extends StatelessWidget {
+  final String? prospectId;
+  final String founderName;
+  final String companyName;
+  final String industry;
+  final String stageLabel;
+  final List<String> priorities;
+  final VoidCallback? onClose;
+  final String? customActionLabel;
+  final VoidCallback? onCustomActionTap;
+  final String? bankerName;
+
+  const AiGuidePanel({
+    super.key,
+    this.prospectId,
+    required this.founderName,
+    required this.companyName,
+    required this.industry,
+    required this.stageLabel,
+    required this.priorities,
+    this.onClose,
+    this.customActionLabel,
+    this.onCustomActionTap,
+    this.bankerName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _AiGuidePanel(
+      prospectId: prospectId,
+      founderName: founderName,
+      companyName: companyName,
+      industry: industry,
+      stageLabel: stageLabel,
+      priorities: priorities,
+      onClose: onClose,
+      customActionLabel: customActionLabel,
+      onCustomActionTap: onCustomActionTap,
+      bankerName: bankerName,
+    );
+  }
+}
+
+class NotificationsSection extends StatelessWidget {
+  const NotificationsSection({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const _NotificationsSection();
+  }
+}
+
+class ProductCard extends StatelessWidget {
+  final IconData icon;
+  final Color tint;
+  final Color iconColor;
+  final String title;
+  final String description;
+  final String cta;
+  final double? matchScore;
+  final String? matchReasoning;
+  final String productId;
+  final String? prospectId;
+  final String? websiteUrl;
+  final VoidCallback? onTap;
+  final bool defaultHover;
+  final VoidCallback? onInteraction;
+
+  const ProductCard({
+    super.key,
+    required this.icon,
+    required this.tint,
+    required this.iconColor,
+    required this.title,
+    required this.description,
+    required this.cta,
+    this.matchScore,
+    this.matchReasoning,
+    required this.productId,
+    this.prospectId,
+    this.websiteUrl,
+    this.onTap,
+    this.defaultHover = false,
+    this.onInteraction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _ProductCard(
+      icon: icon,
+      tint: tint,
+      iconColor: iconColor,
+      title: title,
+      description: description,
+      cta: cta,
+      matchScore: matchScore,
+      matchReasoning: matchReasoning,
+      productId: productId,
+      prospectId: prospectId,
+      websiteUrl: websiteUrl,
+      onTap: onTap,
+      defaultHover: defaultHover,
+      onInteraction: onInteraction,
+    );
+  }
+}
+
+class ProductDetailModal extends StatelessWidget {
+  final ProductPublic product;
+  final String? prospectId;
+
+  const ProductDetailModal({
+    super.key,
+    required this.product,
+    this.prospectId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _ProductDetailModal(
+      product: product,
+      prospectId: prospectId,
     );
   }
 }
