@@ -104,6 +104,29 @@ class CrmActivity {
   }
 }
 
+const Map<int, IconData> _crmActivityIconByCodePoint = {
+  0xf62f: Icons.chat_bubble_outline_rounded,
+  0xf12d: Icons.insert_drive_file_outlined,
+  0xf51a: Icons.access_time_rounded,
+  0xf28c: Icons.phone_in_talk_outlined,
+  0xf0167: Icons.settings_voice_rounded,
+  0xf06a4: Icons.handshake_outlined,
+  0xf5fe: Icons.calendar_today_rounded,
+  0xf026a: Icons.upload_file_rounded,
+  0xf634: Icons.check_circle_outline_rounded,
+  0xf817: Icons.input_rounded,
+  0xf63e: Icons.chrome_reader_mode_rounded,
+  0xef51: Icons.chrome_reader_mode_outlined,
+  0xf006a: Icons.person_add_rounded,
+};
+
+IconData _crmActivityIconFromSnapshot(Map activity) {
+  final codePoint =
+      activity['codePoint'] as int? ?? Icons.chat_bubble_outline_rounded.codePoint;
+  return _crmActivityIconByCodePoint[codePoint] ??
+      Icons.chat_bubble_outline_rounded;
+}
+
 class CrmProspect {
   final String id;
   final String name;
@@ -397,10 +420,7 @@ class BankerProspectsNotifier extends StateNotifier<List<CrmProspect>> {
     if (snapshot.containsKey('activity')) {
       final actList = snapshot['activity'] as List;
       activity = actList.map((a) => CrmActivity(
-        icon: IconData(
-          a['codePoint'] as int? ?? Icons.chat_bubble_outline_rounded.codePoint,
-          fontFamily: a['fontFamily'] as String? ?? 'MaterialIcons',
-        ),
+        icon: _crmActivityIconFromSnapshot(a as Map),
         iconBg: Color(a['iconBg'] as int),
         iconColor: Color(a['iconColor'] as int),
         text: a['text'] as String,
