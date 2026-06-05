@@ -857,6 +857,24 @@ class ConversationService {
     }
     return (data as List).map((item) => item.toString()).toList();
   }
+
+  Future<List<dynamic>> getUnassignedProspects() async {
+    final response = await _dio.get(
+      '${ApiConfig.baseUrl}/conversations/prospects/unassigned',
+    );
+    final data = response.data;
+    if (data is! List) {
+      return [];
+    }
+    return data as List;
+  }
+
+  Future<void> assignProspectToBanker(String prospectId, String bankerId) async {
+    await _dio.post(
+      '${ApiConfig.baseUrl}/conversations/prospect/$prospectId/assign-banker',
+      data: {'banker_id': bankerId},
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

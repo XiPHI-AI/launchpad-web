@@ -512,6 +512,22 @@ class _NotificationsSectionState extends State<_NotificationsSection> {
     _notifService.markAsRead(index);
   }
 
+  void _showNotificationDetail(BuildContext context, NotificationItem item, int index) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.5),
+      builder: (dialogContext) {
+        return _NotificationDetailModal(
+          item: item,
+          onMarkAsRead: () {
+            Navigator.of(dialogContext).pop();
+            _dismissCard(index);
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final activeItems = _notifService.activeHubNotifications;
@@ -550,7 +566,8 @@ class _NotificationsSectionState extends State<_NotificationsSection> {
                         title: item.title,
                         message: item.message,
                         footer: item.footer,
-                        onDismiss: () => _dismissCard(i),
+                        onTap: () => _showNotificationDetail(context, item, i),
+                        onMarkAsRead: () => _dismissCard(i),
                       ),
                     );
                   }),
@@ -571,7 +588,8 @@ class _NotificationsSectionState extends State<_NotificationsSection> {
                               title: item.title,
                               message: item.message,
                               footer: item.footer,
-                              onDismiss: () => _dismissCard(i),
+                              onTap: () => _showNotificationDetail(context, item, i),
+                              onMarkAsRead: () => _dismissCard(i),
                             ),
                           ),
                         );
@@ -2355,7 +2373,8 @@ class _NotificationCard extends StatelessWidget {
   final String title;
   final String message;
   final String footer;
-  final VoidCallback? onDismiss;
+  final VoidCallback? onTap;
+  final VoidCallback? onMarkAsRead;
 
   const _NotificationCard({
     required this.icon,
@@ -2364,7 +2383,8 @@ class _NotificationCard extends StatelessWidget {
     required this.title,
     required this.message,
     required this.footer,
-    this.onDismiss,
+    this.onTap,
+    this.onMarkAsRead,
   });
 
   @override
@@ -2372,7 +2392,7 @@ class _NotificationCard extends StatelessWidget {
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: onDismiss,
+        onTap: onTap,
         behavior: HitTestBehavior.opaque,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -2382,11 +2402,13 @@ class _NotificationCard extends StatelessWidget {
             border: Border.all(color: iconColor.withValues(alpha: 0.18)),
           ),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Icon badge
               Container(
                 width: 32,
                 height: 32,
+                margin: const EdgeInsets.only(top: 1),
                 decoration: BoxDecoration(
                   color: iconBg,
                   borderRadius: BorderRadius.circular(8),
@@ -2394,11 +2416,13 @@ class _NotificationCard extends StatelessWidget {
                 child: Icon(icon, color: iconColor, size: 16),
               ),
               const SizedBox(width: 12),
+              // Text content + footer row
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Title + message
                     Text.rich(
                       TextSpan(
                         style: const TextStyle(
@@ -2417,28 +2441,271 @@ class _NotificationCard extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      footer,
-                      style: const TextStyle(
-                        color: Color(0xFF8D8578),
-                        fontSize: 11,
+                    const SizedBox(height: 5),
+                    // Footer + "Mark as read" at right end
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(
+                          footer,
+                          style: const TextStyle(
+                            color: Color(0xFF8D8578),
+                            fontSize: 11,
+                          ),
+                        ),
+                        const Spacer(),
+                        if (onMarkAsRead != null)
+                          MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                            child: GestureDetector(
+                              onTap: () => onMarkAsRead!(),
+                              behavior: HitTestBehavior.opaque,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: iconBg,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: iconColor.withValues(alpha: 0.35)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.check_circle_outline_rounded, size: 10, color: iconColor),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      'Mark as read',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: iconColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Notification Detail Modal ────────────────────────────────────────────────
+
+class _NotificationDetailModal extends StatelessWidget {
+  final NotificationItem item;
+  final VoidCallback onMarkAsRead;
+
+  const _NotificationDetailModal({
+    required this.item,
+    required this.onMarkAsRead,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final detail = item.detail;
+    final isMobile = MediaQuery.of(context).size.width < 640;
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      child: Container(
+        width: isMobile ? double.infinity : 840,
+        height: isMobile ? null : 680,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Column(
+            children: [
+              // ── Dark Navy Header ──────────────────────────────────────────
+              Container(
+                height: 120,
+                color: const Color(0xFF131F2E),
+                padding: const EdgeInsets.fromLTRB(24, 20, 16, 16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Icon circle with gold border
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF223A56),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: const Color(0xFFB99C4C), width: 1.5),
+                      ),
+                      child: Icon(item.icon, color: const Color(0xFFB99C4C), size: 20),
+                    ),
+                    const SizedBox(width: 14),
+                    // Title + subtitle
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (detail?.headerLabel != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Text(
+                                detail!.headerLabel!,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  letterSpacing: 0.9,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFFB99C4C),
+                                ),
+                              ),
+                            ),
+                          Text(
+                            item.title,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            item.message,
+                            style: const TextStyle(
+                              color: Color(0xFFB0BCC8),
+                              fontSize: 12,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Close button
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 24),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              // ── White Scrollable Body ──────────────────────────────────────
+              Expanded(
+                child: Container(
+                  color: Colors.white,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+                    child: detail == null
+                        ? Text(
+                            item.message,
+                            style: const TextStyle(fontSize: 14, color: Color(0xFF202020)),
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: detail.sections.map((section) {
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 22),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Section title row
+                                    Row(
+                                      children: [
+                                        if (section.icon != null) ...[
+                                          Icon(section.icon, size: 14, color: const Color(0xFF6B6B6B)),
+                                          const SizedBox(width: 6),
+                                        ],
+                                        Text(
+                                          section.title,
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                            color: Color(0xFF202020),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 10),
+                                    // Bullet points
+                                    ...section.bullets.map((bullet) {
+                                      return Padding(
+                                        padding: const EdgeInsets.only(bottom: 8),
+                                        child: Row(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Padding(
+                                              padding: const EdgeInsets.only(top: 6),
+                                              child: Container(
+                                                width: 5,
+                                                height: 5,
+                                                decoration: const BoxDecoration(
+                                                  color: Color(0xFF0A4A8A),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Text(
+                                                bullet,
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                  color: Color(0xFF3D3D3D),
+                                                  height: 1.5,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                  ),
+                ),
+              ),
+              // ── Footer ──────────────────────────────────────────────────────
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                color: Colors.white,
+                child: Row(
+                  children: [
+                    const Spacer(),
+                    // Close
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFF6B6B6B),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      ),
+                      child: const Text('Close', style: TextStyle(fontWeight: FontWeight.w500)),
+                    ),
+                    const SizedBox(width: 8),
+                    // Mark as read
+                    ElevatedButton.icon(
+                      onPressed: onMarkAsRead,
+                      icon: const Icon(Icons.check_circle_outline_rounded, size: 15),
+                      label: const Text(
+                        'Mark as read',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF131F2E),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                     ),
                   ],
                 ),
               ),
-              if (onDismiss != null) ...[
-                const SizedBox(width: 12),
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF0A4A8A),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ],
             ],
           ),
         ),

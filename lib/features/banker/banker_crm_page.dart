@@ -2784,7 +2784,7 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
               ),
               const SizedBox(width: 8),
               ElevatedButton(
-                onPressed: _showAddProspectDialog,
+                              onPressed: _showAssignProspectDialog,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: BankerColors.navy,
                   foregroundColor: Colors.white,
@@ -2792,7 +2792,7 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
-                child: const Text('+ Add prospect', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                child: const Text('+ Assign Prospect', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -3155,161 +3155,286 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
     );
   }
 
-  void _showAddProspectDialog() {
-    final nameCtrl = TextEditingController();
-    final emailCtrl = TextEditingController();
-    final sectorCtrl = TextEditingController();
-    String stage = 'Seed';
-    bool isSaving = false;
+  void _showAssignProspectDialog() {
+    final activeBanker = ref.read(activeBankerProvider);
+    if (activeBanker == null) return;
+
+    String _search = '';
+    List<dynamic> _unassigned = [];
+    bool _loading = true;
+    Map<String, bool> _assigning = {};
 
     showDialog(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
-          builder: (context, setModalState) {
+          builder: (ctx, setModalState) {
+            // Load unassigned prospects once on first build
+            if (_loading && _unassigned.isEmpty) {
+              ConversationService().getUnassignedProspects().then((list) {
+                setModalState(() {
+                  _unassigned = list;
+                  _loading = false;
+                });
+              }).catchError((e) {
+                setModalState(() => _loading = false);
+              });
+            }
+
+            final filtered = _unassigned.where((p) {
+              final companyName = ((p['company_name'] ?? '') as String).toLowerCase();
+              final fullName = ((p['full_name'] ?? '') as String).toLowerCase();
+              final email = ((p['email'] ?? '') as String).toLowerCase();
+              final q = _search.toLowerCase();
+              return companyName.contains(q) || fullName.contains(q) || email.contains(q);
+            }).toList();
+
             return Dialog(
               backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: Container(
-                width: 400,
+                width: 480,
+                constraints: const BoxConstraints(maxHeight: 560),
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text(
-                      'Add New Prospect',
-                      style: TextStyle(fontFamily: 'DM Serif Display', fontSize: 18, fontWeight: FontWeight.bold, color: BankerColors.navy),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: nameCtrl,
-                      decoration: const InputDecoration(labelText: 'Company Name', labelStyle: TextStyle(fontSize: 12), border: OutlineInputBorder()),
-                      enabled: !isSaving,
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: emailCtrl,
-                      decoration: const InputDecoration(labelText: 'Email Address', labelStyle: TextStyle(fontSize: 12), border: OutlineInputBorder()),
-                      enabled: !isSaving,
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: sectorCtrl,
-                      decoration: const InputDecoration(labelText: 'Sector / Industry', labelStyle: TextStyle(fontSize: 12), border: OutlineInputBorder()),
-                      enabled: !isSaving,
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      value: stage,
-                      decoration: const InputDecoration(labelText: 'Funding Stage', labelStyle: TextStyle(fontSize: 12), border: OutlineInputBorder()),
-                      items: ['Pre-seed', 'Seed', 'Series A', 'Series B'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                      onChanged: isSaving ? null : (val) {
-                        if (val != null) {
-                          setModalState(() => stage = val);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 20),
+                    // Header
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        TextButton(
-                          onPressed: isSaving ? null : () => Navigator.pop(dialogContext), 
-                          child: const Text('Cancel', style: TextStyle(color: BankerColors.muted))
-                        ),
+                        const Icon(Icons.person_add_rounded, color: BankerColors.navy, size: 20),
                         const SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: isSaving ? null : () async {
-                            final name = nameCtrl.text.trim();
-                            final email = emailCtrl.text.trim();
-                            final sector = sectorCtrl.text.trim();
-                            
-                            if (name.isEmpty || email.isEmpty) return;
-
-                            setModalState(() => isSaving = true);
-
-                            String stageBucket = 'super_agent';
-                            String companyStage = 'seed';
-                            if (stage == 'Pre-seed') {
-                              stageBucket = 'pre_seed';
-                              companyStage = 'pre_seed';
-                            } else if (stage == 'Seed') {
-                              stageBucket = 'seed';
-                              companyStage = 'seed';
-                            } else if (stage == 'Series A') {
-                              stageBucket = 'early_stage';
-                              companyStage = 'series_a';
-                            } else if (stage == 'Series B') {
-                              stageBucket = 'growth_stage';
-                              companyStage = 'series_b_plus';
-                            }
-
-                            try {
-                              // Create the prospect in PostgreSQL
-                              final prospectId = await ConversationService().createProspect(stageBucket, email: email);
-                              
-                              final initialSnapshot = {
-                                'status': '⏳ Waiting — no chat yet',
-                                'userEmail': email,
-                              };
-                              
-                              // Update details
-                              await ConversationService().updateProspectProfile(
-                                prospectId,
-                                email: email,
-                                companyName: name,
-                                industry: sector.isEmpty ? 'Technology' : sector,
-                                companyStage: companyStage,
-                                fullName: name,
-                                profileSnapshot: initialSnapshot,
-                              );
-
-                              final initials = name.split(' ').map((e) => e.isNotEmpty ? e[0].toUpperCase() : '').take(2).join();
-                              final newProspect = CrmProspect(
-                                id: prospectId,
-                                name: name,
-                                email: email,
-                                sector: sector.isEmpty ? 'Technology' : sector,
-                                stage: stage,
-                                status: '⏳ Waiting — no chat yet',
-                                profileProgress: 0.15,
-                                docsReceivedText: 'None assigned',
-                                docsReceivedCount: 0,
-                                docsTotalCount: 0,
-                                materialsReadText: '—',
-                                materialsReadSub: '',
-                                lastActive: 'Today',
-                                avatarText: initials.isEmpty ? 'C' : initials,
-                                avatarBg: BankerColors.blueSoft,
-                                avatarFg: BankerColors.blue,
-                                docs: [],
-                                education: [],
-                                activity: [
-                                  CrmActivity(
-                                    icon: Icons.input_rounded,
-                                    iconBg: BankerColors.purpleSoft,
-                                    iconColor: const Color(0xFF6B21A8),
-                                    text: 'Prospect manually added to system',
-                                    time: 'Today',
-                                  ),
-                                ],
-                                notes: '',
-                              );
-
-                              ref.read(bankerProspectsProvider.notifier).addProspect(newProspect);
-                              Navigator.pop(dialogContext);
-                            } catch (e) {
-                              print("Failed to manually create prospect: $e");
-                              setModalState(() => isSaving = false);
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(backgroundColor: BankerColors.navy, foregroundColor: Colors.white),
-                          child: isSaving 
-                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                            : const Text('Create'),
+                        const Expanded(
+                          child: Text(
+                            'Assign Prospect',
+                            style: TextStyle(
+                              fontFamily: 'DM Serif Display',
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: BankerColors.navy,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 18, color: BankerColors.muted),
+                          onPressed: () => Navigator.pop(dialogContext),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Select an unassigned prospect to assign to ${activeBanker.name ?? activeBanker.email}',
+                      style: const TextStyle(fontSize: 12, color: BankerColors.muted),
+                    ),
+                    const SizedBox(height: 14),
+                    // Search bar
+                    TextField(
+                      autofocus: true,
+                      onChanged: (val) => setModalState(() => _search = val),
+                      decoration: InputDecoration(
+                        hintText: 'Search by name, company, or email...',
+                        hintStyle: const TextStyle(fontSize: 12),
+                        prefixIcon: const Icon(Icons.search, size: 16, color: BankerColors.muted),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: BankerColors.line2),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: BankerColors.blue),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    // List
+                    Flexible(
+                      child: _loading
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(24.0),
+                                child: CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation<Color>(BankerColors.blue),
+                                ),
+                              ),
+                            )
+                          : filtered.isEmpty
+                              ? Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(24.0),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.people_outline_rounded, size: 40, color: BankerColors.muted.withOpacity(0.5)),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          _search.isEmpty ? 'No unassigned prospects found' : 'No prospects match your search',
+                                          style: const TextStyle(fontSize: 13, color: BankerColors.muted),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                              : ListView.separated(
+                                  shrinkWrap: true,
+                                  itemCount: filtered.length,
+                                  separatorBuilder: (_, __) => const Divider(height: 1, color: BankerColors.line2),
+                                  itemBuilder: (_, i) {
+                                    final p = filtered[i];
+                                    final prospectId = p['prospect_id'] as String? ?? '';
+                                    final companyName = p['company_name'] as String? ?? '';
+                                    final fullName = p['full_name'] as String? ?? '';
+                                    final email = p['email'] as String? ?? '';
+                                    final industry = p['industry'] as String? ?? '';
+                                    final displayName = companyName.isNotEmpty ? companyName : (fullName.isNotEmpty ? fullName : email);
+                                    final subtitle = [
+                                      if (fullName.isNotEmpty && companyName.isNotEmpty) fullName,
+                                      if (industry.isNotEmpty) industry,
+                                      if (email.isNotEmpty) email,
+                                    ].join(' · ');
+                                    final initials = displayName.split(' ').map((e) => e.isNotEmpty ? e[0].toUpperCase() : '').take(2).join();
+                                    final isAssigning = _assigning[prospectId] == true;
+
+                                    return Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+                                      child: Row(
+                                        children: [
+                                          // Avatar
+                                          Container(
+                                            width: 36,
+                                            height: 36,
+                                            decoration: BoxDecoration(
+                                              color: BankerColors.blueSoft,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Center(
+                                              child: Text(
+                                                initials.isEmpty ? '?' : initials,
+                                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: BankerColors.blue),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          // Name + subtitle
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  displayName,
+                                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: BankerColors.navy),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                                if (subtitle.isNotEmpty)
+                                                  Text(
+                                                    subtitle,
+                                                    style: const TextStyle(fontSize: 11, color: BankerColors.muted),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          // Assign button
+                                          SizedBox(
+                                            width: 70,
+                                            height: 30,
+                                            child: ElevatedButton(
+                                              onPressed: isAssigning ? null : () async {
+                                                setModalState(() => _assigning[prospectId] = true);
+                                                try {
+                                                  await ConversationService().assignProspectToBanker(
+                                                    prospectId,
+                                                    activeBanker.bankerId,
+                                                  );
+                                                  // Build CrmProspect from response data
+                                                  final avatarInitials = initials.isEmpty ? '?' : initials;
+                                                  final newProspect = CrmProspect(
+                                                    id: prospectId,
+                                                    name: displayName,
+                                                    email: email,
+                                                    sector: industry.isNotEmpty ? industry : 'Technology',
+                                                    stage: (() {
+                                                      final bucket = p['stage_bucket'] as String? ?? '';
+                                                      if (bucket == 'pre_seed') return 'Pre-seed';
+                                                      if (bucket == 'seed') return 'Seed';
+                                                      if (bucket == 'early_stage') return 'Series A';
+                                                      if (bucket == 'growth_stage') return 'Series B';
+                                                      return 'Seed';
+                                                    })(),
+                                                    status: 'In conversation',
+                                                    profileProgress: 0.5,
+                                                    docsReceivedText: '0/2 received',
+                                                    docsReceivedCount: 0,
+                                                    docsTotalCount: 2,
+                                                    materialsReadText: '—',
+                                                    materialsReadSub: '',
+                                                    lastActive: 'Today',
+                                                    avatarText: avatarInitials,
+                                                    avatarBg: BankerColors.blueSoft,
+                                                    avatarFg: BankerColors.blue,
+                                                    docs: [],
+                                                    education: [],
+                                                    activity: [
+                                                      CrmActivity(
+                                                        icon: Icons.person_add_rounded,
+                                                        iconBg: BankerColors.blueSoft,
+                                                        iconColor: BankerColors.blue,
+                                                        text: 'Prospect assigned to ${activeBanker.name ?? activeBanker.email}',
+                                                        time: 'Today',
+                                                      ),
+                                                    ],
+                                                    notes: '',
+                                                    bankerId: activeBanker.bankerId,
+                                                    founderName: fullName.isNotEmpty ? fullName : displayName,
+                                                    stageBucket: p['stage_bucket'] as String? ?? 'seed',
+                                                  );
+                                                  ref.read(bankerProspectsProvider.notifier).addProspect(newProspect);
+                                                  // Remove from unassigned list
+                                                  setModalState(() {
+                                                    _unassigned.removeWhere((item) => item['prospect_id'] == prospectId);
+                                                    _assigning.remove(prospectId);
+                                                  });
+                                                } catch (e) {
+                                                  setModalState(() => _assigning[prospectId] = false);
+                                                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                                                    SnackBar(content: Text('Failed to assign prospect: $e')),
+                                                  );
+                                                }
+                                              },
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: BankerColors.navy,
+                                                foregroundColor: Colors.white,
+                                                elevation: 0,
+                                                padding: EdgeInsets.zero,
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                              ),
+                                              child: isAssigning
+                                                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                                  : const Text('Assign', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Footer
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(dialogContext),
+                        child: const Text('Close', style: TextStyle(color: BankerColors.muted)),
+                      ),
                     ),
                   ],
                 ),
