@@ -512,6 +512,22 @@ class _NotificationsSectionState extends State<_NotificationsSection> {
     _notifService.markAsRead(index);
   }
 
+  void _showNotificationDetail(BuildContext context, NotificationItem item, int index) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.5),
+      builder: (dialogContext) {
+        return _NotificationDetailModal(
+          item: item,
+          onMarkAsRead: () {
+            Navigator.of(dialogContext).pop();
+            _dismissCard(index);
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final activeItems = _notifService.activeHubNotifications;
@@ -550,7 +566,8 @@ class _NotificationsSectionState extends State<_NotificationsSection> {
                         title: item.title,
                         message: item.message,
                         footer: item.footer,
-                        onDismiss: () => _dismissCard(i),
+                        onTap: () => _showNotificationDetail(context, item, i),
+                        onMarkAsRead: () => _dismissCard(i),
                       ),
                     );
                   }),
@@ -571,7 +588,8 @@ class _NotificationsSectionState extends State<_NotificationsSection> {
                               title: item.title,
                               message: item.message,
                               footer: item.footer,
-                              onDismiss: () => _dismissCard(i),
+                              onTap: () => _showNotificationDetail(context, item, i),
+                              onMarkAsRead: () => _dismissCard(i),
                             ),
                           ),
                         );
@@ -1424,6 +1442,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ScrollController _historyScrollController = ScrollController();
+  final ScrollController _conversationalScrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
   bool _sending = false;
   String get _bankerFirstName {
@@ -1431,46 +1450,154 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
     return name.split(' ').first;
   }
 
-  late final List<_GuideMessage> _messages = [
-    _GuideMessage(
-      isUser: false,
-      text:
-          "I have context from ${widget.founderName}'s profile and the materials in ${widget.companyName}'s learning path. Ask me anything about the next meeting, $_bankerFirstName's notes, or what matters most right now.",
-    ),
-  ];
-
+  List<_GuideMessage> _messages = [];
   bool _viewingHistory = false;
   List<_GuideMessage> _historyMessages = [];
   bool _loadingHistory = false;
   bool _historyHasMore = false;
   int _historyEarliestId = 0;
-  bool _hasHistory = false;
+
+
+  // Banker history state
+  List<_GuideMessage> _voiceTurns = [];
+  bool _loadingVoiceConversations = false;
+  String _activeBankerTab = 'conversational';
 
   @override
   void initState() {
     super.initState();
-    _checkHistory();
+    _resetWelcomeMessage();
+    _loadBankerHistory();
   }
 
-  Future<void> _checkHistory() async {
-    if (widget.prospectId == null) return;
-    try {
-      final result = await _service.getChatHistory(
-        widget.prospectId!,
-        limit: 1,
-      );
-      if (!mounted) return;
-      setState(() => _hasHistory = result.messages.isNotEmpty);
-    } catch (_) {
-      if (!mounted) return;
+  void _resetWelcomeMessage() {
+    _messages = [
+      _GuideMessage(
+        isUser: false,
+        text:
+            "I have context from ${widget.founderName}'s profile and the materials in ${widget.companyName}'s learning path. Ask me anything about the next meeting, $_bankerFirstName's notes, or what matters most right now.",
+      ),
+    ];
+  }
+
+  @override
+  void didUpdateWidget(covariant _AiGuidePanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.prospectId != widget.prospectId || oldWidget.bankerName != widget.bankerName) {
+      _loadBankerHistory();
+      setState(() {
+        _resetWelcomeMessage();
+      });
     }
   }
+
+  List<Map<String, dynamic>> _extractTurns(dynamic raw) {
+    if (raw == null) return [];
+    if (raw is List) {
+      return raw.map((item) {
+        if (item is Map) {
+          final role = item['role'] as String? ?? 'user';
+          final message = item['message'] as String? ?? item['text'] as String? ?? '';
+          return {
+            'role': role.toLowerCase() == 'user' ? 'user' : 'agent',
+            'message': message.trim(),
+          };
+        }
+        return <String, dynamic>{};
+      }).where((element) => element.isNotEmpty && (element['message'] as String).isNotEmpty).toList();
+    }
+    if (raw is Map) {
+      final turns = raw['turns'] ?? raw['messages'] ?? raw['transcript'] ?? raw['history'];
+      if (turns != null) {
+        return _extractTurns(turns);
+      }
+      final list = <Map<String, dynamic>>[];
+      raw.forEach((key, value) {
+        if (value != null && value.toString().trim().isNotEmpty) {
+          final roleStr = key.toString().toLowerCase();
+          final isUser = roleStr.contains('user') || roleStr.contains('human');
+          list.add({
+            'role': isUser ? 'user' : 'agent',
+            'message': value.toString().trim(),
+          });
+        }
+      });
+      return list;
+    }
+    return [];
+  }
+
+  Future<void> _loadBankerHistory() async {
+    if (widget.prospectId == null) {
+      setState(() {
+        _voiceTurns = [];
+        _historyMessages = [];
+      });
+      return;
+    }
+    setState(() {
+      _loadingVoiceConversations = true;
+      _voiceTurns = [];
+      _historyMessages = [];
+      _historyEarliestId = 0;
+      _historyHasMore = false;
+    });
+
+    // Load Chat History (which handles setting _loadingHistory = true itself)
+    await _loadHistory();
+
+    // Load Voice Conversational History
+    try {
+      final conversations = await _service.getProspectConversations(widget.prospectId!);
+      if (mounted) {
+        final reversedConvs = conversations.reversed.toList();
+        final List<_GuideMessage> turns = [];
+        for (var conv in reversedConvs) {
+          if (conv is Map) {
+            final rawTranscript = conv['transcript_json'];
+            final extracted = _extractTurns(rawTranscript);
+            for (var ext in extracted) {
+              final isUser = ext['role'] == 'user';
+              turns.add(_GuideMessage(
+                isUser: isUser,
+                text: ext['message'] ?? '',
+                isMarkdown: false,
+                animate: false,
+              ));
+            }
+          }
+        }
+        setState(() {
+          _voiceTurns = turns;
+          _loadingVoiceConversations = false;
+        });
+        _scrollToBottomConversational();
+      }
+    } catch (e) {
+      debugPrint('Error loading voice conversations: $e');
+      if (mounted) {
+        setState(() {
+          _loadingVoiceConversations = false;
+        });
+      }
+    }
+  }
+
+  void _scrollToBottomConversational() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_conversationalScrollController.hasClients) return;
+      _conversationalScrollController.jumpTo(0);
+    });
+  }
+
+
 
   @override
   void dispose() {
     _controller.dispose();
     _scrollController.dispose();
     _historyScrollController.dispose();
+    _conversationalScrollController.dispose();
     _focusNode.dispose();
     super.dispose();
   }
@@ -1592,7 +1719,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
   }
 
   void _openHistory() {
-    _loadHistory();
+    _loadBankerHistory();
     setState(() => _viewingHistory = true);
   }
 
@@ -1644,8 +1771,13 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
       child: Column(
         children: [
           _buildHeader(),
+          if (_viewingHistory) _buildBankerTabSwitcher(),
           Expanded(
-            child: _viewingHistory ? _buildHistoryBody() : _buildChatBody(),
+            child: _viewingHistory
+                ? (_activeBankerTab == 'conversational'
+                    ? _buildConversationalHistoryBody()
+                    : _buildHistoryBody())
+                : _buildChatBody(),
           ),
           if (!_viewingHistory) _buildInputBar(),
         ],
@@ -1654,6 +1786,8 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
   }
 
   Widget _buildHeader() {
+    final isBankerChats = widget.customActionLabel == 'Prospect Chats';
+
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
       decoration: const BoxDecoration(
@@ -1672,7 +1806,9 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
           ),
           const SizedBox(width: 8),
           Text(
-            _viewingHistory ? 'Chat History' : 'Nova',
+            isBankerChats
+                ? (_viewingHistory ? 'Prospect Chat History' : 'Nova')
+                : (_viewingHistory ? 'Chat History' : 'Nova'),
             style: const TextStyle(
               color: AppThemeTokens.modalHeader,
               fontWeight: FontWeight.w700,
@@ -1681,66 +1817,41 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
           ),
           const Spacer(),
           GestureDetector(
-            onTap: _viewingHistory
-                ? _closeHistory
-                : (widget.prospectId == null ? null : _openHistory),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppThemeTokens.buttonPrimary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(
-                  color: AppThemeTokens.buttonPrimary.withValues(alpha: 0.35),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    _viewingHistory
-                        ? Icons.arrow_back_rounded
-                        : Icons.history_rounded,
-                    size: 13,
-                    color: AppThemeTokens.buttonPrimary,
-                  ),
-                  const SizedBox(width: 5),
-                  Text(
-                    _viewingHistory ? 'Back to Chat' : 'History',
-                    style: const TextStyle(
-                      color: AppThemeTokens.buttonPrimary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (!_viewingHistory) ...[
-            const SizedBox(width: 12),
-            GestureDetector(
-              onTap: widget.onCustomActionTap ?? _openReturnLink,
+            onTap: () {
+              if (_viewingHistory) {
+                _closeHistory();
+              } else {
+                _openHistory();
+              }
+            },
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: AppThemeTokens.modalHeader,
+                  color: AppThemeTokens.buttonPrimary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: AppThemeTokens.buttonPrimary.withValues(alpha: 0.35),
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      widget.customActionLabel != null
-                          ? Icons.chat_bubble_outline_rounded
-                          : Icons.open_in_new_rounded,
+                      _viewingHistory
+                          ? Icons.arrow_back_rounded
+                          : Icons.history_rounded,
                       size: 13,
-                      color: Colors.white,
+                      color: AppThemeTokens.buttonPrimary,
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 5),
                     Text(
-                      widget.customActionLabel ?? 'Talk to Nova',
+                      _viewingHistory
+                          ? 'Back to Nova'
+                          : (isBankerChats ? 'Prospect Chat History' : 'Chat History'),
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: AppThemeTokens.buttonPrimary,
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                       ),
@@ -1749,9 +1860,108 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
                 ),
               ),
             ),
-          ],
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildBankerTabSwitcher() {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Color(0x21000000))),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          _buildBankerTabButton('Conversational History', 'conversational'),
+          const SizedBox(width: 8),
+          _buildBankerTabButton('Chat History', 'chat'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBankerTabButton(String label, String tab) {
+    final isSelected = _activeBankerTab == tab;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _activeBankerTab = tab;
+        });
+        if (tab == 'conversational') {
+          _scrollToBottomConversational();
+        }
+      },
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: isSelected ? const Color(0xFF04213D) : Colors.transparent,
+                width: 2,
+              ),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: isSelected ? const Color(0xFF04213D) : const Color(0xFF6F675B),
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConversationalHistoryBody() {
+    return Container(
+      color: const Color(0xFFFAFAF8),
+      child: _voiceTurns.isEmpty && _loadingVoiceConversations
+          ? const Center(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+            )
+          : _voiceTurns.isEmpty && !_loadingVoiceConversations
+              ? const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Center(
+                    child: Text(
+                      'No conversational history yet.',
+                      style: TextStyle(color: Color(0xFF6B7280), fontSize: 13),
+                    ),
+                  ),
+                )
+              : ListView.builder(
+                  controller: _conversationalScrollController,
+                  padding: const EdgeInsets.all(16),
+                  reverse: true,
+                  itemCount: _voiceTurns.length,
+                  itemBuilder: (context, index) {
+                    final i = _voiceTurns.length - 1 - index;
+                    final msg = _voiceTurns[i];
+                    final isPrevSame = i > 0 && _voiceTurns[i - 1].isUser == msg.isUser;
+                    final isNextSame = i < _voiceTurns.length - 1 && _voiceTurns[i + 1].isUser == msg.isUser;
+
+                    return Padding(
+                      padding: EdgeInsets.only(top: isPrevSame ? 2 : 10, bottom: 1),
+                      child: _GuideMessageBubble(
+                        key: ValueKey('conversational_${i}_${msg.isUser}_${msg.text.hashCode}'),
+                        message: msg,
+                        isPrevSame: isPrevSame,
+                        isNextSame: isNextSame,
+                        enableTypewriter: false,
+                      ),
+                    );
+                  },
+                ),
     );
   }
 
@@ -1978,6 +2188,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
   }
 }
 
+
 class _GuideMessageBubble extends StatelessWidget {
   final _GuideMessage message;
   final bool isPrevSame;
@@ -2017,10 +2228,6 @@ class _GuideMessageBubble extends StatelessWidget {
       ),
     );
 
-    final userAvatar = avatar(
-      const Color(0xFFE5E7EB),
-      const Icon(Icons.person_rounded, size: 16, color: Color(0xFF6B7280)),
-    );
 
     Widget _buildMessageContent(String data) {
       return message.isMarkdown && !isUser
@@ -2166,7 +2373,8 @@ class _NotificationCard extends StatelessWidget {
   final String title;
   final String message;
   final String footer;
-  final VoidCallback? onDismiss;
+  final VoidCallback? onTap;
+  final VoidCallback? onMarkAsRead;
 
   const _NotificationCard({
     required this.icon,
@@ -2175,7 +2383,8 @@ class _NotificationCard extends StatelessWidget {
     required this.title,
     required this.message,
     required this.footer,
-    this.onDismiss,
+    this.onTap,
+    this.onMarkAsRead,
   });
 
   @override
@@ -2183,7 +2392,7 @@ class _NotificationCard extends StatelessWidget {
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: onDismiss,
+        onTap: onTap,
         behavior: HitTestBehavior.opaque,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -2193,11 +2402,13 @@ class _NotificationCard extends StatelessWidget {
             border: Border.all(color: iconColor.withValues(alpha: 0.18)),
           ),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Icon badge
               Container(
                 width: 32,
                 height: 32,
+                margin: const EdgeInsets.only(top: 1),
                 decoration: BoxDecoration(
                   color: iconBg,
                   borderRadius: BorderRadius.circular(8),
@@ -2205,11 +2416,13 @@ class _NotificationCard extends StatelessWidget {
                 child: Icon(icon, color: iconColor, size: 16),
               ),
               const SizedBox(width: 12),
+              // Text content + footer row
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Title + message
                     Text.rich(
                       TextSpan(
                         style: const TextStyle(
@@ -2228,28 +2441,271 @@ class _NotificationCard extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      footer,
-                      style: const TextStyle(
-                        color: Color(0xFF8D8578),
-                        fontSize: 11,
+                    const SizedBox(height: 5),
+                    // Footer + "Mark as read" at right end
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(
+                          footer,
+                          style: const TextStyle(
+                            color: Color(0xFF8D8578),
+                            fontSize: 11,
+                          ),
+                        ),
+                        const Spacer(),
+                        if (onMarkAsRead != null)
+                          MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                            child: GestureDetector(
+                              onTap: () => onMarkAsRead!(),
+                              behavior: HitTestBehavior.opaque,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: iconBg,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: iconColor.withValues(alpha: 0.35)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.check_circle_outline_rounded, size: 10, color: iconColor),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      'Mark as read',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: iconColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Notification Detail Modal ────────────────────────────────────────────────
+
+class _NotificationDetailModal extends StatelessWidget {
+  final NotificationItem item;
+  final VoidCallback onMarkAsRead;
+
+  const _NotificationDetailModal({
+    required this.item,
+    required this.onMarkAsRead,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final detail = item.detail;
+    final isMobile = MediaQuery.of(context).size.width < 640;
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      child: Container(
+        width: isMobile ? double.infinity : 840,
+        height: isMobile ? null : 680,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Column(
+            children: [
+              // ── Dark Navy Header ──────────────────────────────────────────
+              Container(
+                height: 120,
+                color: const Color(0xFF131F2E),
+                padding: const EdgeInsets.fromLTRB(24, 20, 16, 16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Icon circle with gold border
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF223A56),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: const Color(0xFFB99C4C), width: 1.5),
+                      ),
+                      child: Icon(item.icon, color: const Color(0xFFB99C4C), size: 20),
+                    ),
+                    const SizedBox(width: 14),
+                    // Title + subtitle
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (detail?.headerLabel != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Text(
+                                detail!.headerLabel!,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  letterSpacing: 0.9,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFFB99C4C),
+                                ),
+                              ),
+                            ),
+                          Text(
+                            item.title,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            item.message,
+                            style: const TextStyle(
+                              color: Color(0xFFB0BCC8),
+                              fontSize: 12,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Close button
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 24),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              // ── White Scrollable Body ──────────────────────────────────────
+              Expanded(
+                child: Container(
+                  color: Colors.white,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+                    child: detail == null
+                        ? Text(
+                            item.message,
+                            style: const TextStyle(fontSize: 14, color: Color(0xFF202020)),
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: detail.sections.map((section) {
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 22),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Section title row
+                                    Row(
+                                      children: [
+                                        if (section.icon != null) ...[
+                                          Icon(section.icon, size: 14, color: const Color(0xFF6B6B6B)),
+                                          const SizedBox(width: 6),
+                                        ],
+                                        Text(
+                                          section.title,
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                            color: Color(0xFF202020),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 10),
+                                    // Bullet points
+                                    ...section.bullets.map((bullet) {
+                                      return Padding(
+                                        padding: const EdgeInsets.only(bottom: 8),
+                                        child: Row(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Padding(
+                                              padding: const EdgeInsets.only(top: 6),
+                                              child: Container(
+                                                width: 5,
+                                                height: 5,
+                                                decoration: const BoxDecoration(
+                                                  color: Color(0xFF0A4A8A),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Text(
+                                                bullet,
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                  color: Color(0xFF3D3D3D),
+                                                  height: 1.5,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                  ),
+                ),
+              ),
+              // ── Footer ──────────────────────────────────────────────────────
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                color: Colors.white,
+                child: Row(
+                  children: [
+                    const Spacer(),
+                    // Close
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFF6B6B6B),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      ),
+                      child: const Text('Close', style: TextStyle(fontWeight: FontWeight.w500)),
+                    ),
+                    const SizedBox(width: 8),
+                    // Mark as read
+                    ElevatedButton.icon(
+                      onPressed: onMarkAsRead,
+                      icon: const Icon(Icons.check_circle_outline_rounded, size: 15),
+                      label: const Text(
+                        'Mark as read',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF131F2E),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                     ),
                   ],
                 ),
               ),
-              if (onDismiss != null) ...[
-                const SizedBox(width: 12),
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF0A4A8A),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ],
             ],
           ),
         ),
@@ -3023,6 +3479,7 @@ class ProspectProfileModal extends StatefulWidget {
   final String companyName;
   final String initials;
   final String? stageBucket;
+  final bool isBanker;
 
   const ProspectProfileModal({
     required this.prospectId,
@@ -3030,6 +3487,7 @@ class ProspectProfileModal extends StatefulWidget {
     required this.companyName,
     required this.initials,
     this.stageBucket,
+    this.isBanker = false,
   });
 
   @override
@@ -3105,7 +3563,7 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
       child: Container(
         width: isMobile ? double.infinity : 840,
-        height: isMobile ? null : 680.0,
+        height: isMobile ? null : (widget.isBanker ? 520.0 : 680.0),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: Column(
@@ -3188,8 +3646,10 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
                                         child: Column(
                                           children: [
                                             _buildDetailsList(),
-                                            const SizedBox(height: 24),
-                                            _buildVoiceInteractionArea(),
+                                            if (!widget.isBanker) ...[
+                                              const SizedBox(height: 24),
+                                              _buildVoiceInteractionArea(),
+                                            ],
                                           ],
                                         ),
                                       )
@@ -3197,35 +3657,36 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Expanded(
-                                            flex: 5,
+                                            flex: widget.isBanker ? 1 : 5,
                                             child: SingleChildScrollView(
                                               padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
                                               child: _buildDetailsList(),
                                             ),
                                           ),
-                                          Expanded(
-                                            flex: 4,
-                                            child: ScrollConfiguration(
-                                              behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-                                              child: LayoutBuilder(
-                                                builder: (context, constraints) {
-                                                  return SingleChildScrollView(
-                                                    child: ConstrainedBox(
-                                                      constraints: BoxConstraints(
-                                                        minHeight: constraints.maxHeight,
-                                                      ),
-                                                      child: Center(
-                                                        child: Padding(
-                                                          padding: const EdgeInsets.symmetric(vertical: 16),
-                                                          child: _buildVoiceInteractionArea(),
+                                          if (!widget.isBanker)
+                                            Expanded(
+                                              flex: 4,
+                                              child: ScrollConfiguration(
+                                                behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                                                child: LayoutBuilder(
+                                                  builder: (context, constraints) {
+                                                    return SingleChildScrollView(
+                                                      child: ConstrainedBox(
+                                                        constraints: BoxConstraints(
+                                                          minHeight: constraints.maxHeight,
+                                                        ),
+                                                        child: Center(
+                                                          child: Padding(
+                                                            padding: const EdgeInsets.symmetric(vertical: 16),
+                                                            child: _buildVoiceInteractionArea(),
+                                                          ),
                                                         ),
                                                       ),
-                                                    ),
-                                                  );
-                                                },
+                                                    );
+                                                  },
+                                                ),
                                               ),
                                             ),
-                                          ),
                                         ],
                                       ),
                               ),
@@ -3279,6 +3740,30 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
                 ))
             .toList()
         : null;
+
+    if (widget.isBanker) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _buildSection(companyLabel, manualFormRows),
+              ),
+              const SizedBox(width: 32),
+              Expanded(
+                child: _buildSection('YOUR DETAILS', firstFormRows),
+              ),
+            ],
+          ),
+          if (insightRows != null && insightRows.isNotEmpty) ...[
+            const SizedBox(height: 32),
+            _buildSentenceSection('What We Have Collected', insightRows),
+          ],
+        ],
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

@@ -104,6 +104,29 @@ class CrmActivity {
   }
 }
 
+const Map<int, IconData> _crmActivityIconByCodePoint = {
+  0xf62f: Icons.chat_bubble_outline_rounded,
+  0xf12d: Icons.insert_drive_file_outlined,
+  0xf51a: Icons.access_time_rounded,
+  0xf28c: Icons.phone_in_talk_outlined,
+  0xf0167: Icons.settings_voice_rounded,
+  0xf06a4: Icons.handshake_outlined,
+  0xf5fe: Icons.calendar_today_rounded,
+  0xf026a: Icons.upload_file_rounded,
+  0xf634: Icons.check_circle_outline_rounded,
+  0xf817: Icons.input_rounded,
+  0xf63e: Icons.chrome_reader_mode_rounded,
+  0xef51: Icons.chrome_reader_mode_outlined,
+  0xf006a: Icons.person_add_rounded,
+};
+
+IconData _crmActivityIconFromSnapshot(Map activity) {
+  final codePoint =
+      activity['codePoint'] as int? ?? Icons.chat_bubble_outline_rounded.codePoint;
+  return _crmActivityIconByCodePoint[codePoint] ??
+      Icons.chat_bubble_outline_rounded;
+}
+
 class CrmProspect {
   final String id;
   final String name;
@@ -122,6 +145,12 @@ class CrmProspect {
   final Color avatarBg;
   final Color avatarFg;
   final String? bankerId;
+  final String founderName;
+  final String stageBucket;
+  final String phoneNumber;
+  final String headcount;
+  final bool incorporated;
+  final List<String> priorities;
   
   final List<CrmDoc> docs;
   final List<CrmEdu> education;
@@ -150,7 +179,25 @@ class CrmProspect {
     required this.activity,
     required this.notes,
     this.bankerId,
+    this.founderName = 'Guest',
+    this.stageBucket = 'exploration',
+    this.phoneNumber = '',
+    this.headcount = '1-10',
+    this.incorporated = false,
+    this.priorities = const [],
   });
+
+  String get initials {
+    final source = founderName.trim().isNotEmpty ? founderName : name;
+    final parts = source
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .take(2)
+        .toList();
+    return parts.isEmpty
+        ? 'G'
+        : parts.map((part) => part[0].toUpperCase()).join();
+  }
 
   CrmProspect copyWith({
     String? id,
@@ -174,6 +221,12 @@ class CrmProspect {
     List<CrmActivity>? activity,
     String? notes,
     String? bankerId,
+    String? founderName,
+    String? stageBucket,
+    String? phoneNumber,
+    String? headcount,
+    bool? incorporated,
+    List<String>? priorities,
   }) {
     return CrmProspect(
       id: id ?? this.id,
@@ -197,6 +250,12 @@ class CrmProspect {
       activity: activity ?? List.from(this.activity),
       notes: notes ?? this.notes,
       bankerId: bankerId ?? this.bankerId,
+      founderName: founderName ?? this.founderName,
+      stageBucket: stageBucket ?? this.stageBucket,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
+      headcount: headcount ?? this.headcount,
+      incorporated: incorporated ?? this.incorporated,
+      priorities: priorities ?? this.priorities,
     );
   }
 }
@@ -361,10 +420,7 @@ class BankerProspectsNotifier extends StateNotifier<List<CrmProspect>> {
     if (snapshot.containsKey('activity')) {
       final actList = snapshot['activity'] as List;
       activity = actList.map((a) => CrmActivity(
-        icon: IconData(
-          a['codePoint'] as int? ?? Icons.chat_bubble_outline_rounded.codePoint,
-          fontFamily: a['fontFamily'] as String? ?? 'MaterialIcons',
-        ),
+        icon: _crmActivityIconFromSnapshot(a as Map),
         iconBg: Color(a['iconBg'] as int),
         iconColor: Color(a['iconColor'] as int),
         text: a['text'] as String,
@@ -414,6 +470,14 @@ class BankerProspectsNotifier extends StateNotifier<List<CrmProspect>> {
     final Color avatarBg = mockMatch?.avatarBg ?? BankerColors.blueSoft;
     final Color avatarFg = mockMatch?.avatarFg ?? BankerColors.blue;
 
+    final String phoneNumber = r.phoneNumber ?? '';
+    final String headcount = r.headcount ?? '1-10';
+    final bool incorporated = r.incorporated;
+    final List<String> priorities = r.selectedPrioritiesJson.entries
+        .where((e) => e.value)
+        .map((e) => e.key)
+        .toList();
+
     return CrmProspect(
       id: id,
       name: name,
@@ -436,6 +500,12 @@ class BankerProspectsNotifier extends StateNotifier<List<CrmProspect>> {
       activity: activity,
       notes: notes,
       bankerId: r.bankerId,
+      founderName: r.fullName ?? 'Guest',
+      stageBucket: r.stageBucket,
+      phoneNumber: phoneNumber,
+      headcount: headcount,
+      incorporated: incorporated,
+      priorities: priorities,
     );
   }
 
@@ -856,7 +926,7 @@ final bankersProvider = FutureProvider<List<Banker>>((ref) async {
 });
 
 final activeBankerProvider = StateProvider<Banker?>((ref) {
-  return null;
+  return ProspectStorage().getActiveBankerSync();
 });
 
 final bankerProspectsProvider = StateNotifierProvider<BankerProspectsNotifier, List<CrmProspect>>((ref) {
@@ -886,11 +956,14 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
   final TextEditingController _notesController = TextEditingController();
   List<ProductPublic> _products = [];
   bool _loadingProducts = false;
+  List<String> _suggestedQuestions = [];
+  bool _loadingQuestions = false;
 
   @override
   void initState() {
     super.initState();
     _fetchProducts();
+    _fetchSuggestedQuestions();
   }
 
   @override
@@ -898,6 +971,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.prospectId != widget.prospectId) {
       _fetchProducts();
+      _fetchSuggestedQuestions();
     }
   }
 
@@ -924,52 +998,52 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
     }
   }
 
+  Future<void> _fetchSuggestedQuestions() async {
+    if (!mounted) return;
+    setState(() {
+      _loadingQuestions = true;
+      _suggestedQuestions = [];
+    });
+    try {
+      final questions = await ConversationService().getSuggestedQuestions(widget.prospectId);
+      if (mounted) {
+        setState(() {
+          _suggestedQuestions = questions;
+          _loadingQuestions = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching suggested questions: $e');
+      if (mounted) {
+        setState(() {
+          _loadingQuestions = false;
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
     _notesController.dispose();
     super.dispose();
   }
 
-  Widget _buildStatusBadge(String status) {
-    Color bg = BankerColors.purpleSoft;
-    Color fg = const Color(0xFF4B43B6);
 
-    if (status.contains('Call')) {
-      bg = const Color(0xFFFEF3C7);
-      fg = const Color(0xFF92400E);
-    } else if (status.contains('Awaiting docs')) {
-      bg = BankerColors.redSoft;
-      fg = const Color(0xFF991B1B);
-    } else if (status.contains('Intro chat done')) {
-      bg = BankerColors.blueSoft;
-      fg = const Color(0xFF185FA5);
-    } else if (status.contains('In conversation')) {
-      bg = BankerColors.amberSoft;
-      fg = const Color(0xFF7C5410);
-    } else if (status.contains('Fully onboarded')) {
-      bg = BankerColors.greenSoft;
-      fg = const Color(0xFF0F6E56);
-    } else if (status.contains('Waiting')) {
-      bg = const Color(0xFFF3E8FF);
-      fg = const Color(0xFF6B21A8);
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        status,
-        style: TextStyle(fontSize: 10, color: fg, fontWeight: FontWeight.bold),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     final prospects = ref.watch(bankerProspectsProvider);
+    
+    if (prospects.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24.0),
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(BankerColors.blue),
+          ),
+        ),
+      );
+    }
     
     // Find matching prospect
     final prospect = prospects.firstWhere(
@@ -982,7 +1056,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
       _notesController.text = prospect.notes;
     }
 
-    final isMobile = MediaQuery.of(context).size.width < 1000;
+
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1044,17 +1118,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const SizedBox(width: 6),
-                        Container(
-                          width: 3,
-                          height: 3,
-                          decoration: const BoxDecoration(
-                            color: BankerColors.muted2,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        _buildStatusBadge(prospect.status),
+
                       ],
                     ),
                   ],
@@ -1224,6 +1288,64 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Profile details at top
+        Container(
+          padding: const EdgeInsets.all(16),
+          margin: const EdgeInsets.only(bottom: 18),
+          decoration: BoxDecoration(
+            color: BankerColors.cream,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: BankerColors.line2),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${prospect.name.toUpperCase()} PROFILE DETAILS',
+                style: const TextStyle(
+                  fontSize: 10,
+                  letterSpacing: 1.2,
+                  color: BankerColors.navy,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Left details (Company details)
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildInlineDetailRow('Industry', prospect.sector),
+                        _buildInlineDetailRow('Stage', prospect.stage),
+                        _buildInlineDetailRow('Headcount', prospect.headcount),
+                        _buildInlineDetailRow('Incorporated', prospect.incorporated ? 'Yes' : 'No'),
+                        if (prospect.priorities.isNotEmpty)
+                          _buildInlineDetailRow('Priorities', prospect.priorities.join(', ')),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 24),
+                  // Right details (Contact details)
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildInlineDetailRow('Founder', prospect.founderName),
+                        _buildInlineDetailRow('Email', prospect.email),
+                        if (prospect.phoneNumber.isNotEmpty)
+                          _buildInlineDetailRow('Phone', prospect.phoneNumber),
+                        _buildInlineDetailRow('Company', prospect.name),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
         // 1. Stats Row
         Row(
           children: [
@@ -1492,6 +1614,38 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
     );
   }
 
+  Widget _buildInlineDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 90,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 11,
+                color: BankerColors.muted,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 11,
+                color: BankerColors.ink,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   IconData _getIconForCategory(String category) {
     final c = category.toLowerCase();
     if (c.contains('payment')) return Icons.payments_outlined;
@@ -1607,18 +1761,29 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
   }
 
   Widget _buildSuggestedQuestionsTab(CrmProspect prospect) {
-    final List<String> questions = [
-      'What is your primary focus for cash runway extension over the next 12 months?',
-      'Are you planning any international expansion, foreign hiring, or multi-currency operations in the near term?',
-      'Which payment processors/gateways do you currently use, and what are your key transaction fee pain points?',
-      'How does your current capital structure look, and are you considering venture debt to complement your next equity round?',
+    if (_loadingQuestions) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24.0),
+        child: Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(BankerColors.blue),
+          ),
+        ),
+      );
+    }
+
+    final questions = _suggestedQuestions.isNotEmpty ? _suggestedQuestions : [
+      'How can J.P. Morgan help us extend our runway given our current stage?',
+      'What are the requirements and onboarding timelines for setting up multi-currency accounts or global banking at J.P. Morgan?',
+      'How do your transaction fees and payment gateway integrations compare to standard processors we are using?',
+      'What venture debt options are available for us to complement our upcoming fundraising rounds?',
     ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Text(
-          'Recommended questions to ask during the relationship call:',
+          'Questions the prospect might ask you during the relationship call (to prepare for):',
           style: TextStyle(fontSize: 11, color: BankerColors.muted2),
         ),
         const SizedBox(height: 12),
@@ -2354,8 +2519,10 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
               orElse: () => bankers.first,
             );
             ref.read(activeBankerProvider.notifier).state = savedBanker;
+            ProspectStorage().saveActiveBanker(savedBanker);
           } else {
             ref.read(activeBankerProvider.notifier).state = bankers.first;
+            ProspectStorage().saveActiveBanker(bankers.first);
           }
         });
       }
@@ -2400,7 +2567,7 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
           activeBanker: activeBanker,
           onBankerSelected: (banker) {
             ref.read(activeBankerProvider.notifier).state = banker;
-            ProspectStorage().saveActiveBankerId(banker.bankerId);
+            ProspectStorage().saveActiveBanker(banker);
           },
           onLogout: () async {
             ProspectCache.clear();
@@ -2637,7 +2804,7 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
               ),
               const SizedBox(width: 8),
               ElevatedButton(
-                onPressed: _showAddProspectDialog,
+                              onPressed: _showAssignProspectDialog,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: BankerColors.navy,
                   foregroundColor: Colors.white,
@@ -2645,7 +2812,7 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
-                child: const Text('+ Add prospect', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                child: const Text('+ Assign Prospect', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -3008,161 +3175,286 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
     );
   }
 
-  void _showAddProspectDialog() {
-    final nameCtrl = TextEditingController();
-    final emailCtrl = TextEditingController();
-    final sectorCtrl = TextEditingController();
-    String stage = 'Seed';
-    bool isSaving = false;
+  void _showAssignProspectDialog() {
+    final activeBanker = ref.read(activeBankerProvider);
+    if (activeBanker == null) return;
+
+    String _search = '';
+    List<dynamic> _unassigned = [];
+    bool _loading = true;
+    Map<String, bool> _assigning = {};
 
     showDialog(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
-          builder: (context, setModalState) {
+          builder: (ctx, setModalState) {
+            // Load unassigned prospects once on first build
+            if (_loading && _unassigned.isEmpty) {
+              ConversationService().getUnassignedProspects().then((list) {
+                setModalState(() {
+                  _unassigned = list;
+                  _loading = false;
+                });
+              }).catchError((e) {
+                setModalState(() => _loading = false);
+              });
+            }
+
+            final filtered = _unassigned.where((p) {
+              final companyName = ((p['company_name'] ?? '') as String).toLowerCase();
+              final fullName = ((p['full_name'] ?? '') as String).toLowerCase();
+              final email = ((p['email'] ?? '') as String).toLowerCase();
+              final q = _search.toLowerCase();
+              return companyName.contains(q) || fullName.contains(q) || email.contains(q);
+            }).toList();
+
             return Dialog(
               backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: Container(
-                width: 400,
+                width: 480,
+                constraints: const BoxConstraints(maxHeight: 560),
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text(
-                      'Add New Prospect',
-                      style: TextStyle(fontFamily: 'DM Serif Display', fontSize: 18, fontWeight: FontWeight.bold, color: BankerColors.navy),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: nameCtrl,
-                      decoration: const InputDecoration(labelText: 'Company Name', labelStyle: TextStyle(fontSize: 12), border: OutlineInputBorder()),
-                      enabled: !isSaving,
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: emailCtrl,
-                      decoration: const InputDecoration(labelText: 'Email Address', labelStyle: TextStyle(fontSize: 12), border: OutlineInputBorder()),
-                      enabled: !isSaving,
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: sectorCtrl,
-                      decoration: const InputDecoration(labelText: 'Sector / Industry', labelStyle: TextStyle(fontSize: 12), border: OutlineInputBorder()),
-                      enabled: !isSaving,
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      value: stage,
-                      decoration: const InputDecoration(labelText: 'Funding Stage', labelStyle: TextStyle(fontSize: 12), border: OutlineInputBorder()),
-                      items: ['Pre-seed', 'Seed', 'Series A', 'Series B'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                      onChanged: isSaving ? null : (val) {
-                        if (val != null) {
-                          setModalState(() => stage = val);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 20),
+                    // Header
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        TextButton(
-                          onPressed: isSaving ? null : () => Navigator.pop(dialogContext), 
-                          child: const Text('Cancel', style: TextStyle(color: BankerColors.muted))
-                        ),
+                        const Icon(Icons.person_add_rounded, color: BankerColors.navy, size: 20),
                         const SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: isSaving ? null : () async {
-                            final name = nameCtrl.text.trim();
-                            final email = emailCtrl.text.trim();
-                            final sector = sectorCtrl.text.trim();
-                            
-                            if (name.isEmpty || email.isEmpty) return;
-
-                            setModalState(() => isSaving = true);
-
-                            String stageBucket = 'super_agent';
-                            String companyStage = 'seed';
-                            if (stage == 'Pre-seed') {
-                              stageBucket = 'pre_seed';
-                              companyStage = 'pre_seed';
-                            } else if (stage == 'Seed') {
-                              stageBucket = 'seed';
-                              companyStage = 'seed';
-                            } else if (stage == 'Series A') {
-                              stageBucket = 'early_stage';
-                              companyStage = 'series_a';
-                            } else if (stage == 'Series B') {
-                              stageBucket = 'growth_stage';
-                              companyStage = 'series_b_plus';
-                            }
-
-                            try {
-                              // Create the prospect in PostgreSQL
-                              final prospectId = await ConversationService().createProspect(stageBucket, email: email);
-                              
-                              final initialSnapshot = {
-                                'status': '⏳ Waiting — no chat yet',
-                                'userEmail': email,
-                              };
-                              
-                              // Update details
-                              await ConversationService().updateProspectProfile(
-                                prospectId,
-                                email: email,
-                                companyName: name,
-                                industry: sector.isEmpty ? 'Technology' : sector,
-                                companyStage: companyStage,
-                                fullName: name,
-                                profileSnapshot: initialSnapshot,
-                              );
-
-                              final initials = name.split(' ').map((e) => e.isNotEmpty ? e[0].toUpperCase() : '').take(2).join();
-                              final newProspect = CrmProspect(
-                                id: prospectId,
-                                name: name,
-                                email: email,
-                                sector: sector.isEmpty ? 'Technology' : sector,
-                                stage: stage,
-                                status: '⏳ Waiting — no chat yet',
-                                profileProgress: 0.15,
-                                docsReceivedText: 'None assigned',
-                                docsReceivedCount: 0,
-                                docsTotalCount: 0,
-                                materialsReadText: '—',
-                                materialsReadSub: '',
-                                lastActive: 'Today',
-                                avatarText: initials.isEmpty ? 'C' : initials,
-                                avatarBg: BankerColors.blueSoft,
-                                avatarFg: BankerColors.blue,
-                                docs: [],
-                                education: [],
-                                activity: [
-                                  CrmActivity(
-                                    icon: Icons.input_rounded,
-                                    iconBg: BankerColors.purpleSoft,
-                                    iconColor: const Color(0xFF6B21A8),
-                                    text: 'Prospect manually added to system',
-                                    time: 'Today',
-                                  ),
-                                ],
-                                notes: '',
-                              );
-
-                              ref.read(bankerProspectsProvider.notifier).addProspect(newProspect);
-                              Navigator.pop(dialogContext);
-                            } catch (e) {
-                              print("Failed to manually create prospect: $e");
-                              setModalState(() => isSaving = false);
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(backgroundColor: BankerColors.navy, foregroundColor: Colors.white),
-                          child: isSaving 
-                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                            : const Text('Create'),
+                        const Expanded(
+                          child: Text(
+                            'Assign Prospect',
+                            style: TextStyle(
+                              fontFamily: 'DM Serif Display',
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: BankerColors.navy,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 18, color: BankerColors.muted),
+                          onPressed: () => Navigator.pop(dialogContext),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Select an unassigned prospect to assign to ${activeBanker.name ?? activeBanker.email}',
+                      style: const TextStyle(fontSize: 12, color: BankerColors.muted),
+                    ),
+                    const SizedBox(height: 14),
+                    // Search bar
+                    TextField(
+                      autofocus: true,
+                      onChanged: (val) => setModalState(() => _search = val),
+                      decoration: InputDecoration(
+                        hintText: 'Search by name, company, or email...',
+                        hintStyle: const TextStyle(fontSize: 12),
+                        prefixIcon: const Icon(Icons.search, size: 16, color: BankerColors.muted),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: BankerColors.line2),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: BankerColors.blue),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    // List
+                    Flexible(
+                      child: _loading
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(24.0),
+                                child: CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation<Color>(BankerColors.blue),
+                                ),
+                              ),
+                            )
+                          : filtered.isEmpty
+                              ? Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(24.0),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.people_outline_rounded, size: 40, color: BankerColors.muted.withOpacity(0.5)),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          _search.isEmpty ? 'No unassigned prospects found' : 'No prospects match your search',
+                                          style: const TextStyle(fontSize: 13, color: BankerColors.muted),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                              : ListView.separated(
+                                  shrinkWrap: true,
+                                  itemCount: filtered.length,
+                                  separatorBuilder: (_, __) => const Divider(height: 1, color: BankerColors.line2),
+                                  itemBuilder: (_, i) {
+                                    final p = filtered[i];
+                                    final prospectId = p['prospect_id'] as String? ?? '';
+                                    final companyName = p['company_name'] as String? ?? '';
+                                    final fullName = p['full_name'] as String? ?? '';
+                                    final email = p['email'] as String? ?? '';
+                                    final industry = p['industry'] as String? ?? '';
+                                    final displayName = companyName.isNotEmpty ? companyName : (fullName.isNotEmpty ? fullName : email);
+                                    final subtitle = [
+                                      if (fullName.isNotEmpty && companyName.isNotEmpty) fullName,
+                                      if (industry.isNotEmpty) industry,
+                                      if (email.isNotEmpty) email,
+                                    ].join(' · ');
+                                    final initials = displayName.split(' ').map((e) => e.isNotEmpty ? e[0].toUpperCase() : '').take(2).join();
+                                    final isAssigning = _assigning[prospectId] == true;
+
+                                    return Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+                                      child: Row(
+                                        children: [
+                                          // Avatar
+                                          Container(
+                                            width: 36,
+                                            height: 36,
+                                            decoration: BoxDecoration(
+                                              color: BankerColors.blueSoft,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Center(
+                                              child: Text(
+                                                initials.isEmpty ? '?' : initials,
+                                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: BankerColors.blue),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          // Name + subtitle
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  displayName,
+                                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: BankerColors.navy),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                                if (subtitle.isNotEmpty)
+                                                  Text(
+                                                    subtitle,
+                                                    style: const TextStyle(fontSize: 11, color: BankerColors.muted),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          // Assign button
+                                          SizedBox(
+                                            width: 70,
+                                            height: 30,
+                                            child: ElevatedButton(
+                                              onPressed: isAssigning ? null : () async {
+                                                setModalState(() => _assigning[prospectId] = true);
+                                                try {
+                                                  await ConversationService().assignProspectToBanker(
+                                                    prospectId,
+                                                    activeBanker.bankerId,
+                                                  );
+                                                  // Build CrmProspect from response data
+                                                  final avatarInitials = initials.isEmpty ? '?' : initials;
+                                                  final newProspect = CrmProspect(
+                                                    id: prospectId,
+                                                    name: displayName,
+                                                    email: email,
+                                                    sector: industry.isNotEmpty ? industry : 'Technology',
+                                                    stage: (() {
+                                                      final bucket = p['stage_bucket'] as String? ?? '';
+                                                      if (bucket == 'pre_seed') return 'Pre-seed';
+                                                      if (bucket == 'seed') return 'Seed';
+                                                      if (bucket == 'early_stage') return 'Series A';
+                                                      if (bucket == 'growth_stage') return 'Series B';
+                                                      return 'Seed';
+                                                    })(),
+                                                    status: 'In conversation',
+                                                    profileProgress: 0.5,
+                                                    docsReceivedText: '0/2 received',
+                                                    docsReceivedCount: 0,
+                                                    docsTotalCount: 2,
+                                                    materialsReadText: '—',
+                                                    materialsReadSub: '',
+                                                    lastActive: 'Today',
+                                                    avatarText: avatarInitials,
+                                                    avatarBg: BankerColors.blueSoft,
+                                                    avatarFg: BankerColors.blue,
+                                                    docs: [],
+                                                    education: [],
+                                                    activity: [
+                                                      CrmActivity(
+                                                        icon: Icons.person_add_rounded,
+                                                        iconBg: BankerColors.blueSoft,
+                                                        iconColor: BankerColors.blue,
+                                                        text: 'Prospect assigned to ${activeBanker.name ?? activeBanker.email}',
+                                                        time: 'Today',
+                                                      ),
+                                                    ],
+                                                    notes: '',
+                                                    bankerId: activeBanker.bankerId,
+                                                    founderName: fullName.isNotEmpty ? fullName : displayName,
+                                                    stageBucket: p['stage_bucket'] as String? ?? 'seed',
+                                                  );
+                                                  ref.read(bankerProspectsProvider.notifier).addProspect(newProspect);
+                                                  // Remove from unassigned list
+                                                  setModalState(() {
+                                                    _unassigned.removeWhere((item) => item['prospect_id'] == prospectId);
+                                                    _assigning.remove(prospectId);
+                                                  });
+                                                } catch (e) {
+                                                  setModalState(() => _assigning[prospectId] = false);
+                                                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                                                    SnackBar(content: Text('Failed to assign prospect: $e')),
+                                                  );
+                                                }
+                                              },
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: BankerColors.navy,
+                                                foregroundColor: Colors.white,
+                                                elevation: 0,
+                                                padding: EdgeInsets.zero,
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                              ),
+                                              child: isAssigning
+                                                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                                  : const Text('Assign', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Footer
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(dialogContext),
+                        child: const Text('Close', style: TextStyle(color: BankerColors.muted)),
+                      ),
                     ),
                   ],
                 ),
@@ -3208,8 +3500,10 @@ class BankerDetailPage extends ConsumerWidget {
               orElse: () => bankers.first,
             );
             ref.read(activeBankerProvider.notifier).state = savedBanker;
+            ProspectStorage().saveActiveBanker(savedBanker);
           } else {
             ref.read(activeBankerProvider.notifier).state = bankers.first;
+            ProspectStorage().saveActiveBanker(bankers.first);
           }
         });
       }
@@ -3273,7 +3567,7 @@ class BankerDetailPage extends ConsumerWidget {
               activeBanker: activeBanker,
               onBankerSelected: (banker) {
                 ref.read(activeBankerProvider.notifier).state = banker;
-                ProspectStorage().saveActiveBankerId(banker.bankerId);
+                ProspectStorage().saveActiveBanker(banker);
                 // Go back to the main banker dashboard
                 context.go('/banker');
               },

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/auth/login_page.dart';
-import '../features/auth/signup_page.dart';
 import '../features/landing_jpmc/jpmc_startups_clone_page.dart';
 import '../features/relationship_hub/relationship_hub_page.dart';
 import '../features/banker/banker_crm_page.dart';
@@ -39,11 +38,20 @@ GoRouter createRouter({
     refreshListenable: refreshNotifier,
     redirect: (BuildContext context, GoRouterState state) {
       final authed = isAuthenticated();
-      final isOnAuth =
-          state.matchedLocation == AppRoutes.login ||
-          state.matchedLocation == AppRoutes.signup;
+      final location = state.matchedLocation;
+      final isOnLogin = location == AppRoutes.login;
+      final isOnSignup = location == AppRoutes.signup;
 
-      if (authed && isOnAuth) return AppRoutes.home;
+      if (!authed) {
+        if (isOnLogin) {
+          return null;
+        }
+        return AppRoutes.login;
+      }
+
+      if (isOnLogin || isOnSignup) {
+        return AppRoutes.home;
+      }
 
       return null;
     },
@@ -56,9 +64,7 @@ GoRouter createRouter({
       ),
       GoRoute(
         path: AppRoutes.signup,
-        pageBuilder: (context, state) => const NoTransitionPage(
-          child: SignupPage(),
-        ),
+        redirect: (_, __) => AppRoutes.login,
       ),
       GoRoute(
         path: AppRoutes.stageSelector,
