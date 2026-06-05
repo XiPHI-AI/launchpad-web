@@ -122,6 +122,12 @@ class CrmProspect {
   final Color avatarBg;
   final Color avatarFg;
   final String? bankerId;
+  final String founderName;
+  final String stageBucket;
+  final String phoneNumber;
+  final String headcount;
+  final bool incorporated;
+  final List<String> priorities;
   
   final List<CrmDoc> docs;
   final List<CrmEdu> education;
@@ -150,7 +156,25 @@ class CrmProspect {
     required this.activity,
     required this.notes,
     this.bankerId,
+    this.founderName = 'Guest',
+    this.stageBucket = 'exploration',
+    this.phoneNumber = '',
+    this.headcount = '1-10',
+    this.incorporated = false,
+    this.priorities = const [],
   });
+
+  String get initials {
+    final source = founderName.trim().isNotEmpty ? founderName : name;
+    final parts = source
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .take(2)
+        .toList();
+    return parts.isEmpty
+        ? 'G'
+        : parts.map((part) => part[0].toUpperCase()).join();
+  }
 
   CrmProspect copyWith({
     String? id,
@@ -174,6 +198,12 @@ class CrmProspect {
     List<CrmActivity>? activity,
     String? notes,
     String? bankerId,
+    String? founderName,
+    String? stageBucket,
+    String? phoneNumber,
+    String? headcount,
+    bool? incorporated,
+    List<String>? priorities,
   }) {
     return CrmProspect(
       id: id ?? this.id,
@@ -197,6 +227,12 @@ class CrmProspect {
       activity: activity ?? List.from(this.activity),
       notes: notes ?? this.notes,
       bankerId: bankerId ?? this.bankerId,
+      founderName: founderName ?? this.founderName,
+      stageBucket: stageBucket ?? this.stageBucket,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
+      headcount: headcount ?? this.headcount,
+      incorporated: incorporated ?? this.incorporated,
+      priorities: priorities ?? this.priorities,
     );
   }
 }
@@ -414,6 +450,14 @@ class BankerProspectsNotifier extends StateNotifier<List<CrmProspect>> {
     final Color avatarBg = mockMatch?.avatarBg ?? BankerColors.blueSoft;
     final Color avatarFg = mockMatch?.avatarFg ?? BankerColors.blue;
 
+    final String phoneNumber = r.phoneNumber ?? '';
+    final String headcount = r.headcount ?? '1-10';
+    final bool incorporated = r.incorporated;
+    final List<String> priorities = r.selectedPrioritiesJson.entries
+        .where((e) => e.value)
+        .map((e) => e.key)
+        .toList();
+
     return CrmProspect(
       id: id,
       name: name,
@@ -436,6 +480,12 @@ class BankerProspectsNotifier extends StateNotifier<List<CrmProspect>> {
       activity: activity,
       notes: notes,
       bankerId: r.bankerId,
+      founderName: r.fullName ?? 'Guest',
+      stageBucket: r.stageBucket,
+      phoneNumber: phoneNumber,
+      headcount: headcount,
+      incorporated: incorporated,
+      priorities: priorities,
     );
   }
 
@@ -886,11 +936,14 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
   final TextEditingController _notesController = TextEditingController();
   List<ProductPublic> _products = [];
   bool _loadingProducts = false;
+  List<String> _suggestedQuestions = [];
+  bool _loadingQuestions = false;
 
   @override
   void initState() {
     super.initState();
     _fetchProducts();
+    _fetchSuggestedQuestions();
   }
 
   @override
@@ -898,6 +951,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.prospectId != widget.prospectId) {
       _fetchProducts();
+      _fetchSuggestedQuestions();
     }
   }
 
@@ -924,52 +978,52 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
     }
   }
 
+  Future<void> _fetchSuggestedQuestions() async {
+    if (!mounted) return;
+    setState(() {
+      _loadingQuestions = true;
+      _suggestedQuestions = [];
+    });
+    try {
+      final questions = await ConversationService().getSuggestedQuestions(widget.prospectId);
+      if (mounted) {
+        setState(() {
+          _suggestedQuestions = questions;
+          _loadingQuestions = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching suggested questions: $e');
+      if (mounted) {
+        setState(() {
+          _loadingQuestions = false;
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
     _notesController.dispose();
     super.dispose();
   }
 
-  Widget _buildStatusBadge(String status) {
-    Color bg = BankerColors.purpleSoft;
-    Color fg = const Color(0xFF4B43B6);
 
-    if (status.contains('Call')) {
-      bg = const Color(0xFFFEF3C7);
-      fg = const Color(0xFF92400E);
-    } else if (status.contains('Awaiting docs')) {
-      bg = BankerColors.redSoft;
-      fg = const Color(0xFF991B1B);
-    } else if (status.contains('Intro chat done')) {
-      bg = BankerColors.blueSoft;
-      fg = const Color(0xFF185FA5);
-    } else if (status.contains('In conversation')) {
-      bg = BankerColors.amberSoft;
-      fg = const Color(0xFF7C5410);
-    } else if (status.contains('Fully onboarded')) {
-      bg = BankerColors.greenSoft;
-      fg = const Color(0xFF0F6E56);
-    } else if (status.contains('Waiting')) {
-      bg = const Color(0xFFF3E8FF);
-      fg = const Color(0xFF6B21A8);
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        status,
-        style: TextStyle(fontSize: 10, color: fg, fontWeight: FontWeight.bold),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     final prospects = ref.watch(bankerProspectsProvider);
+    
+    if (prospects.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24.0),
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(BankerColors.blue),
+          ),
+        ),
+      );
+    }
     
     // Find matching prospect
     final prospect = prospects.firstWhere(
@@ -982,7 +1036,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
       _notesController.text = prospect.notes;
     }
 
-    final isMobile = MediaQuery.of(context).size.width < 1000;
+
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1044,17 +1098,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const SizedBox(width: 6),
-                        Container(
-                          width: 3,
-                          height: 3,
-                          decoration: const BoxDecoration(
-                            color: BankerColors.muted2,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        _buildStatusBadge(prospect.status),
+
                       ],
                     ),
                   ],
@@ -1224,6 +1268,64 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Profile details at top
+        Container(
+          padding: const EdgeInsets.all(16),
+          margin: const EdgeInsets.only(bottom: 18),
+          decoration: BoxDecoration(
+            color: BankerColors.cream,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: BankerColors.line2),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${prospect.name.toUpperCase()} PROFILE DETAILS',
+                style: const TextStyle(
+                  fontSize: 10,
+                  letterSpacing: 1.2,
+                  color: BankerColors.navy,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Left details (Company details)
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildInlineDetailRow('Industry', prospect.sector),
+                        _buildInlineDetailRow('Stage', prospect.stage),
+                        _buildInlineDetailRow('Headcount', prospect.headcount),
+                        _buildInlineDetailRow('Incorporated', prospect.incorporated ? 'Yes' : 'No'),
+                        if (prospect.priorities.isNotEmpty)
+                          _buildInlineDetailRow('Priorities', prospect.priorities.join(', ')),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 24),
+                  // Right details (Contact details)
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildInlineDetailRow('Founder', prospect.founderName),
+                        _buildInlineDetailRow('Email', prospect.email),
+                        if (prospect.phoneNumber.isNotEmpty)
+                          _buildInlineDetailRow('Phone', prospect.phoneNumber),
+                        _buildInlineDetailRow('Company', prospect.name),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
         // 1. Stats Row
         Row(
           children: [
@@ -1492,6 +1594,38 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
     );
   }
 
+  Widget _buildInlineDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 90,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 11,
+                color: BankerColors.muted,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 11,
+                color: BankerColors.ink,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   IconData _getIconForCategory(String category) {
     final c = category.toLowerCase();
     if (c.contains('payment')) return Icons.payments_outlined;
@@ -1607,18 +1741,29 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
   }
 
   Widget _buildSuggestedQuestionsTab(CrmProspect prospect) {
-    final List<String> questions = [
-      'What is your primary focus for cash runway extension over the next 12 months?',
-      'Are you planning any international expansion, foreign hiring, or multi-currency operations in the near term?',
-      'Which payment processors/gateways do you currently use, and what are your key transaction fee pain points?',
-      'How does your current capital structure look, and are you considering venture debt to complement your next equity round?',
+    if (_loadingQuestions) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24.0),
+        child: Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(BankerColors.blue),
+          ),
+        ),
+      );
+    }
+
+    final questions = _suggestedQuestions.isNotEmpty ? _suggestedQuestions : [
+      'How can J.P. Morgan help us extend our runway given our current stage?',
+      'What are the requirements and onboarding timelines for setting up multi-currency accounts or global banking at J.P. Morgan?',
+      'How do your transaction fees and payment gateway integrations compare to standard processors we are using?',
+      'What venture debt options are available for us to complement our upcoming fundraising rounds?',
     ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Text(
-          'Recommended questions to ask during the relationship call:',
+          'Questions the prospect might ask you during the relationship call (to prepare for):',
           style: TextStyle(fontSize: 11, color: BankerColors.muted2),
         ),
         const SizedBox(height: 12),

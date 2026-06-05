@@ -846,6 +846,17 @@ class ConversationService {
     }
     return data as List;
   }
+
+  Future<List<String>> getSuggestedQuestions(String prospectId) async {
+    final response = await _dio.get(
+      '${ApiConfig.baseUrl}/conversations/prospect/$prospectId/suggested-questions',
+    );
+    final data = response.data;
+    if (data is! List) {
+      return [];
+    }
+    return (data as List).map((item) => item.toString()).toList();
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -3236,6 +3236,7 @@ class ProspectProfileModal extends StatefulWidget {
   final String companyName;
   final String initials;
   final String? stageBucket;
+  final bool isBanker;
 
   const ProspectProfileModal({
     required this.prospectId,
@@ -3243,6 +3244,7 @@ class ProspectProfileModal extends StatefulWidget {
     required this.companyName,
     required this.initials,
     this.stageBucket,
+    this.isBanker = false,
   });
 
   @override
@@ -3318,7 +3320,7 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
       child: Container(
         width: isMobile ? double.infinity : 840,
-        height: isMobile ? null : 680.0,
+        height: isMobile ? null : (widget.isBanker ? 520.0 : 680.0),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: Column(
@@ -3401,8 +3403,10 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
                                         child: Column(
                                           children: [
                                             _buildDetailsList(),
-                                            const SizedBox(height: 24),
-                                            _buildVoiceInteractionArea(),
+                                            if (!widget.isBanker) ...[
+                                              const SizedBox(height: 24),
+                                              _buildVoiceInteractionArea(),
+                                            ],
                                           ],
                                         ),
                                       )
@@ -3410,35 +3414,36 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Expanded(
-                                            flex: 5,
+                                            flex: widget.isBanker ? 1 : 5,
                                             child: SingleChildScrollView(
                                               padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
                                               child: _buildDetailsList(),
                                             ),
                                           ),
-                                          Expanded(
-                                            flex: 4,
-                                            child: ScrollConfiguration(
-                                              behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-                                              child: LayoutBuilder(
-                                                builder: (context, constraints) {
-                                                  return SingleChildScrollView(
-                                                    child: ConstrainedBox(
-                                                      constraints: BoxConstraints(
-                                                        minHeight: constraints.maxHeight,
-                                                      ),
-                                                      child: Center(
-                                                        child: Padding(
-                                                          padding: const EdgeInsets.symmetric(vertical: 16),
-                                                          child: _buildVoiceInteractionArea(),
+                                          if (!widget.isBanker)
+                                            Expanded(
+                                              flex: 4,
+                                              child: ScrollConfiguration(
+                                                behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                                                child: LayoutBuilder(
+                                                  builder: (context, constraints) {
+                                                    return SingleChildScrollView(
+                                                      child: ConstrainedBox(
+                                                        constraints: BoxConstraints(
+                                                          minHeight: constraints.maxHeight,
+                                                        ),
+                                                        child: Center(
+                                                          child: Padding(
+                                                            padding: const EdgeInsets.symmetric(vertical: 16),
+                                                            child: _buildVoiceInteractionArea(),
+                                                          ),
                                                         ),
                                                       ),
-                                                    ),
-                                                  );
-                                                },
+                                                    );
+                                                  },
+                                                ),
                                               ),
                                             ),
-                                          ),
                                         ],
                                       ),
                               ),
@@ -3492,6 +3497,30 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
                 ))
             .toList()
         : null;
+
+    if (widget.isBanker) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _buildSection(companyLabel, manualFormRows),
+              ),
+              const SizedBox(width: 32),
+              Expanded(
+                child: _buildSection('YOUR DETAILS', firstFormRows),
+              ),
+            ],
+          ),
+          if (insightRows != null && insightRows.isNotEmpty) ...[
+            const SizedBox(height: 32),
+            _buildSentenceSection('What We Have Collected', insightRows),
+          ],
+        ],
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
