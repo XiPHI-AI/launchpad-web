@@ -692,7 +692,10 @@ class ConversationService {
       '${ApiConfig.baseUrl}/conversations/relationship-hub/chat-history/$prospectId',
       queryParameters: queryParams,
     );
-    final data = response.data as Map<String, dynamic>;
+    final data = response.data;
+    if (data is! Map) {
+      return const ChatHistoryResult(messages: [], total: 0, hasMore: false);
+    }
     final messages = (data['messages'] as List<dynamic>?)
             ?.map((m) =>
                 ChatHistoryMessage.fromJson(m as Map<String, dynamic>))
@@ -712,8 +715,12 @@ class ConversationService {
         if (prospectId != null) 'prospect_id': prospectId,
       },
     );
-    final data = response.data['products'] as List;
-    return data.map((json) => ProductPublic.fromJson(json)).toList();
+    final data = response.data;
+    if (data is! Map || data['products'] is! List) {
+      return [];
+    }
+    final list = data['products'] as List;
+    return list.map((json) => ProductPublic.fromJson(json)).toList();
   }
 
   Future<MatchReasoningResult> getMatchReasoning({
@@ -752,7 +759,11 @@ class ConversationService {
     final response = await _dio.get(
       '${ApiConfig.baseUrl}/conversations/prospects',
     );
-    final list = response.data as List;
+    final data = response.data;
+    if (data is! List) {
+      throw Exception('Expected list of prospects from API, but got: $data');
+    }
+    final list = data as List;
     return list.map((item) {
       final data = item as Map<String, dynamic>;
       final conversationCount = data['conversation_count'] as int? ?? 0;
@@ -815,10 +826,25 @@ class ConversationService {
     final response = await _dio.get(
       '${ApiConfig.baseUrl}/conversations/bankers',
     );
-    final list = response.data as List;
+    final data = response.data;
+    if (data is! List) {
+      throw Exception('Expected list of bankers from API, but got: $data');
+    }
+    final list = data as List;
     return list
         .map((item) => Banker.fromJson(item as Map<String, dynamic>))
         .toList();
+  }
+
+  Future<List<dynamic>> getProspectConversations(String prospectId) async {
+    final response = await _dio.get(
+      '${ApiConfig.baseUrl}/conversations/prospect/$prospectId/conversations',
+    );
+    final data = response.data;
+    if (data is! List) {
+      return [];
+    }
+    return data as List;
   }
 }
 

@@ -856,7 +856,7 @@ final bankersProvider = FutureProvider<List<Banker>>((ref) async {
 });
 
 final activeBankerProvider = StateProvider<Banker?>((ref) {
-  return null;
+  return ProspectStorage().getActiveBankerSync();
 });
 
 final bankerProspectsProvider = StateNotifierProvider<BankerProspectsNotifier, List<CrmProspect>>((ref) {
@@ -2354,8 +2354,10 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
               orElse: () => bankers.first,
             );
             ref.read(activeBankerProvider.notifier).state = savedBanker;
+            ProspectStorage().saveActiveBanker(savedBanker);
           } else {
             ref.read(activeBankerProvider.notifier).state = bankers.first;
+            ProspectStorage().saveActiveBanker(bankers.first);
           }
         });
       }
@@ -2400,7 +2402,7 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
           activeBanker: activeBanker,
           onBankerSelected: (banker) {
             ref.read(activeBankerProvider.notifier).state = banker;
-            ProspectStorage().saveActiveBankerId(banker.bankerId);
+            ProspectStorage().saveActiveBanker(banker);
           },
           onLogout: () async {
             ProspectCache.clear();
@@ -3208,8 +3210,10 @@ class BankerDetailPage extends ConsumerWidget {
               orElse: () => bankers.first,
             );
             ref.read(activeBankerProvider.notifier).state = savedBanker;
+            ProspectStorage().saveActiveBanker(savedBanker);
           } else {
             ref.read(activeBankerProvider.notifier).state = bankers.first;
+            ProspectStorage().saveActiveBanker(bankers.first);
           }
         });
       }
@@ -3273,7 +3277,7 @@ class BankerDetailPage extends ConsumerWidget {
               activeBanker: activeBanker,
               onBankerSelected: (banker) {
                 ref.read(activeBankerProvider.notifier).state = banker;
-                ProspectStorage().saveActiveBankerId(banker.bankerId);
+                ProspectStorage().saveActiveBanker(banker);
                 // Go back to the main banker dashboard
                 context.go('/banker');
               },

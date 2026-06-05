@@ -1424,6 +1424,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ScrollController _historyScrollController = ScrollController();
+  final ScrollController _conversationalScrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
   bool _sending = false;
   String get _bankerFirstName {
@@ -1431,14 +1432,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
     return name.split(' ').first;
   }
 
-  late final List<_GuideMessage> _messages = [
-    _GuideMessage(
-      isUser: false,
-      text:
-          "I have context from ${widget.founderName}'s profile and the materials in ${widget.companyName}'s learning path. Ask me anything about the next meeting, $_bankerFirstName's notes, or what matters most right now.",
-    ),
-  ];
-
+  List<_GuideMessage> _messages = [];
   bool _viewingHistory = false;
   List<_GuideMessage> _historyMessages = [];
   bool _loadingHistory = false;
@@ -1446,10 +1440,144 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
   int _historyEarliestId = 0;
   bool _hasHistory = false;
 
+  // Banker history state
+  List<_GuideMessage> _voiceTurns = [];
+  bool _loadingVoiceConversations = false;
+  String _activeBankerTab = 'conversational';
+
   @override
   void initState() {
     super.initState();
-    _checkHistory();
+    _resetWelcomeMessage();
+    if (widget.customActionLabel == 'Prospect Chats') {
+      _loadBankerHistory();
+    } else {
+      _checkHistory();
+    }
+  }
+
+  void _resetWelcomeMessage() {
+    _messages = [
+      _GuideMessage(
+        isUser: false,
+        text:
+            "I have context from ${widget.founderName}'s profile and the materials in ${widget.companyName}'s learning path. Ask me anything about the next meeting, $_bankerFirstName's notes, or what matters most right now.",
+      ),
+    ];
+  }
+
+  @override
+  void didUpdateWidget(covariant _AiGuidePanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.prospectId != widget.prospectId || oldWidget.bankerName != widget.bankerName) {
+      if (widget.customActionLabel == 'Prospect Chats') {
+        _loadBankerHistory();
+      } else {
+        _checkHistory();
+        setState(() {
+          _resetWelcomeMessage();
+        });
+      }
+    }
+  }
+
+  List<Map<String, dynamic>> _extractTurns(dynamic raw) {
+    if (raw == null) return [];
+    if (raw is List) {
+      return raw.map((item) {
+        if (item is Map) {
+          final role = item['role'] as String? ?? 'user';
+          final message = item['message'] as String? ?? item['text'] as String? ?? '';
+          return {
+            'role': role.toLowerCase() == 'user' ? 'user' : 'agent',
+            'message': message.trim(),
+          };
+        }
+        return <String, dynamic>{};
+      }).where((element) => element.isNotEmpty && (element['message'] as String).isNotEmpty).toList();
+    }
+    if (raw is Map) {
+      final turns = raw['turns'] ?? raw['messages'] ?? raw['transcript'] ?? raw['history'];
+      if (turns != null) {
+        return _extractTurns(turns);
+      }
+      final list = <Map<String, dynamic>>[];
+      raw.forEach((key, value) {
+        if (value != null && value.toString().trim().isNotEmpty) {
+          final roleStr = key.toString().toLowerCase();
+          final isUser = roleStr.contains('user') || roleStr.contains('human');
+          list.add({
+            'role': isUser ? 'user' : 'agent',
+            'message': value.toString().trim(),
+          });
+        }
+      });
+      return list;
+    }
+    return [];
+  }
+
+  Future<void> _loadBankerHistory() async {
+    if (widget.prospectId == null) {
+      setState(() {
+        _voiceTurns = [];
+        _historyMessages = [];
+      });
+      return;
+    }
+    setState(() {
+      _loadingVoiceConversations = true;
+      _voiceTurns = [];
+      _historyMessages = [];
+      _historyEarliestId = 0;
+      _historyHasMore = false;
+    });
+
+    // Load Chat History (which handles setting _loadingHistory = true itself)
+    await _loadHistory();
+
+    // Load Voice Conversational History
+    try {
+      final conversations = await _service.getProspectConversations(widget.prospectId!);
+      if (mounted) {
+        final reversedConvs = conversations.reversed.toList();
+        final List<_GuideMessage> turns = [];
+        for (var conv in reversedConvs) {
+          if (conv is Map) {
+            final rawTranscript = conv['transcript_json'];
+            final extracted = _extractTurns(rawTranscript);
+            for (var ext in extracted) {
+              final isUser = ext['role'] == 'user';
+              turns.add(_GuideMessage(
+                isUser: isUser,
+                text: ext['message'] ?? '',
+                isMarkdown: false,
+                animate: false,
+              ));
+            }
+          }
+        }
+        setState(() {
+          _voiceTurns = turns;
+          _loadingVoiceConversations = false;
+        });
+        _scrollToBottomConversational();
+      }
+    } catch (e) {
+      debugPrint('Error loading voice conversations: $e');
+      if (mounted) {
+        setState(() {
+          _loadingVoiceConversations = false;
+        });
+      }
+    }
+  }
+
+  void _scrollToBottomConversational() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_conversationalScrollController.hasClients) return;
+      _conversationalScrollController.jumpTo(0);
+    });
   }
 
   Future<void> _checkHistory() async {
@@ -1471,6 +1599,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
     _controller.dispose();
     _scrollController.dispose();
     _historyScrollController.dispose();
+    _conversationalScrollController.dispose();
     _focusNode.dispose();
     super.dispose();
   }
@@ -1636,6 +1765,8 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
 
   @override
   Widget build(BuildContext context) {
+    final isBankerChats = widget.customActionLabel == 'Prospect Chats';
+
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -1644,8 +1775,15 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
       child: Column(
         children: [
           _buildHeader(),
+          if (_viewingHistory && isBankerChats) _buildBankerTabSwitcher(),
           Expanded(
-            child: _viewingHistory ? _buildHistoryBody() : _buildChatBody(),
+            child: _viewingHistory
+                ? (isBankerChats
+                    ? (_activeBankerTab == 'conversational'
+                        ? _buildConversationalHistoryBody()
+                        : _buildHistoryBody())
+                    : _buildHistoryBody())
+                : _buildChatBody(),
           ),
           if (!_viewingHistory) _buildInputBar(),
         ],
@@ -1654,6 +1792,8 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
   }
 
   Widget _buildHeader() {
+    final isBankerChats = widget.customActionLabel == 'Prospect Chats';
+
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
       decoration: const BoxDecoration(
@@ -1672,7 +1812,9 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
           ),
           const SizedBox(width: 8),
           Text(
-            _viewingHistory ? 'Chat History' : 'Nova',
+            isBankerChats
+                ? (_viewingHistory ? 'Prospect Chat History' : 'Nova')
+                : (_viewingHistory ? 'Chat History' : 'Nova'),
             style: const TextStyle(
               color: AppThemeTokens.modalHeader,
               fontWeight: FontWeight.w700,
@@ -1681,66 +1823,41 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
           ),
           const Spacer(),
           GestureDetector(
-            onTap: _viewingHistory
-                ? _closeHistory
-                : (widget.prospectId == null ? null : _openHistory),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppThemeTokens.buttonPrimary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(
-                  color: AppThemeTokens.buttonPrimary.withValues(alpha: 0.35),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    _viewingHistory
-                        ? Icons.arrow_back_rounded
-                        : Icons.history_rounded,
-                    size: 13,
-                    color: AppThemeTokens.buttonPrimary,
-                  ),
-                  const SizedBox(width: 5),
-                  Text(
-                    _viewingHistory ? 'Back to Chat' : 'History',
-                    style: const TextStyle(
-                      color: AppThemeTokens.buttonPrimary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (!_viewingHistory) ...[
-            const SizedBox(width: 12),
-            GestureDetector(
-              onTap: widget.onCustomActionTap ?? _openReturnLink,
+            onTap: () {
+              if (_viewingHistory) {
+                _closeHistory();
+              } else {
+                _openHistory();
+              }
+            },
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: AppThemeTokens.modalHeader,
+                  color: AppThemeTokens.buttonPrimary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: AppThemeTokens.buttonPrimary.withValues(alpha: 0.35),
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      widget.customActionLabel != null
-                          ? Icons.chat_bubble_outline_rounded
-                          : Icons.open_in_new_rounded,
+                      _viewingHistory
+                          ? Icons.arrow_back_rounded
+                          : Icons.history_rounded,
                       size: 13,
-                      color: Colors.white,
+                      color: AppThemeTokens.buttonPrimary,
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 5),
                     Text(
-                      widget.customActionLabel ?? 'Talk to Nova',
+                      _viewingHistory
+                          ? (isBankerChats ? 'Back to Nova' : 'Back to Chat')
+                          : (isBankerChats ? 'Prospect Chat History' : 'History'),
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: AppThemeTokens.buttonPrimary,
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                       ),
@@ -1749,9 +1866,108 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
                 ),
               ),
             ),
-          ],
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildBankerTabSwitcher() {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Color(0x21000000))),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          _buildBankerTabButton('Conversational History', 'conversational'),
+          const SizedBox(width: 8),
+          _buildBankerTabButton('Chat History', 'chat'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBankerTabButton(String label, String tab) {
+    final isSelected = _activeBankerTab == tab;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _activeBankerTab = tab;
+        });
+        if (tab == 'conversational') {
+          _scrollToBottomConversational();
+        }
+      },
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: isSelected ? const Color(0xFF04213D) : Colors.transparent,
+                width: 2,
+              ),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: isSelected ? const Color(0xFF04213D) : const Color(0xFF6F675B),
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConversationalHistoryBody() {
+    return Container(
+      color: const Color(0xFFFAFAF8),
+      child: _voiceTurns.isEmpty && _loadingVoiceConversations
+          ? const Center(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+            )
+          : _voiceTurns.isEmpty && !_loadingVoiceConversations
+              ? const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Center(
+                    child: Text(
+                      'No conversational history yet.',
+                      style: TextStyle(color: Color(0xFF6B7280), fontSize: 13),
+                    ),
+                  ),
+                )
+              : ListView.builder(
+                  controller: _conversationalScrollController,
+                  padding: const EdgeInsets.all(16),
+                  reverse: true,
+                  itemCount: _voiceTurns.length,
+                  itemBuilder: (context, index) {
+                    final i = _voiceTurns.length - 1 - index;
+                    final msg = _voiceTurns[i];
+                    final isPrevSame = i > 0 && _voiceTurns[i - 1].isUser == msg.isUser;
+                    final isNextSame = i < _voiceTurns.length - 1 && _voiceTurns[i + 1].isUser == msg.isUser;
+
+                    return Padding(
+                      padding: EdgeInsets.only(top: isPrevSame ? 2 : 10, bottom: 1),
+                      child: _GuideMessageBubble(
+                        key: ValueKey('conversational_${i}_${msg.isUser}_${msg.text.hashCode}'),
+                        message: msg,
+                        isPrevSame: isPrevSame,
+                        isNextSame: isNextSame,
+                        enableTypewriter: false,
+                      ),
+                    );
+                  },
+                ),
     );
   }
 
@@ -1978,6 +2194,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
   }
 }
 
+
 class _GuideMessageBubble extends StatelessWidget {
   final _GuideMessage message;
   final bool isPrevSame;
@@ -2017,10 +2234,6 @@ class _GuideMessageBubble extends StatelessWidget {
       ),
     );
 
-    final userAvatar = avatar(
-      const Color(0xFFE5E7EB),
-      const Icon(Icons.person_rounded, size: 16, color: Color(0xFF6B7280)),
-    );
 
     Widget _buildMessageContent(String data) {
       return message.isMarkdown && !isUser
