@@ -1438,7 +1438,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
   bool _loadingHistory = false;
   bool _historyHasMore = false;
   int _historyEarliestId = 0;
-  bool _hasHistory = false;
+
 
   // Banker history state
   List<_GuideMessage> _voiceTurns = [];
@@ -1449,11 +1449,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
   void initState() {
     super.initState();
     _resetWelcomeMessage();
-    if (widget.customActionLabel == 'Prospect Chats') {
-      _loadBankerHistory();
-    } else {
-      _checkHistory();
-    }
+    _loadBankerHistory();
   }
 
   void _resetWelcomeMessage() {
@@ -1470,14 +1466,10 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
   void didUpdateWidget(covariant _AiGuidePanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.prospectId != widget.prospectId || oldWidget.bankerName != widget.bankerName) {
-      if (widget.customActionLabel == 'Prospect Chats') {
-        _loadBankerHistory();
-      } else {
-        _checkHistory();
-        setState(() {
-          _resetWelcomeMessage();
-        });
-      }
+      _loadBankerHistory();
+      setState(() {
+        _resetWelcomeMessage();
+      });
     }
   }
 
@@ -1580,19 +1572,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
     });
   }
 
-  Future<void> _checkHistory() async {
-    if (widget.prospectId == null) return;
-    try {
-      final result = await _service.getChatHistory(
-        widget.prospectId!,
-        limit: 1,
-      );
-      if (!mounted) return;
-      setState(() => _hasHistory = result.messages.isNotEmpty);
-    } catch (_) {
-      if (!mounted) return;
-    }
-  }
+
 
   @override
   void dispose() {
@@ -1721,7 +1701,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
   }
 
   void _openHistory() {
-    _loadHistory();
+    _loadBankerHistory();
     setState(() => _viewingHistory = true);
   }
 
@@ -1765,8 +1745,6 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
 
   @override
   Widget build(BuildContext context) {
-    final isBankerChats = widget.customActionLabel == 'Prospect Chats';
-
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -1775,13 +1753,11 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
       child: Column(
         children: [
           _buildHeader(),
-          if (_viewingHistory && isBankerChats) _buildBankerTabSwitcher(),
+          if (_viewingHistory) _buildBankerTabSwitcher(),
           Expanded(
             child: _viewingHistory
-                ? (isBankerChats
-                    ? (_activeBankerTab == 'conversational'
-                        ? _buildConversationalHistoryBody()
-                        : _buildHistoryBody())
+                ? (_activeBankerTab == 'conversational'
+                    ? _buildConversationalHistoryBody()
                     : _buildHistoryBody())
                 : _buildChatBody(),
           ),
@@ -1854,8 +1830,8 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
                     const SizedBox(width: 5),
                     Text(
                       _viewingHistory
-                          ? (isBankerChats ? 'Back to Nova' : 'Back to Chat')
-                          : (isBankerChats ? 'Prospect Chat History' : 'History'),
+                          ? 'Back to Nova'
+                          : (isBankerChats ? 'Prospect Chat History' : 'Chat History'),
                       style: const TextStyle(
                         color: AppThemeTokens.buttonPrimary,
                         fontSize: 11,
