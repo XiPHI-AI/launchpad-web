@@ -47,6 +47,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Test SSH connectivity with retries
+        run: |
+          max_attempts=5
+          wait_seconds=15
+          for attempt in $(seq 1 $max_attempts); do
+            echo "SSH connectivity check attempt $attempt/$max_attempts..."
+            if timeout 10 bash -c "echo 'SSH test' | ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ secrets.VM_HOST }} 'echo SSH OK'" 2>/dev/null; then
+              echo "SSH connectivity confirmed"
+              exit 0
+            fi
+            if [ $attempt -lt $max_attempts ]; then
+              echo "Connection failed. Waiting ${wait_seconds}s before retry..."
+              sleep $wait_seconds
+            fi
+          done
+          echo "SSH connectivity check failed after $max_attempts attempts"
+          exit 1
+
       - name: Deploy to VM via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
