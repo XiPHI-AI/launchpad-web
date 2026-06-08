@@ -326,6 +326,92 @@ class Banker {
 }
 
 
+class CheckpointMaster {
+  final String checkpointId;
+  final String category;
+  final String title;
+  final String? description;
+  final List<String> miniCheckpoints;
+
+  const CheckpointMaster({
+    required this.checkpointId,
+    required this.category,
+    required this.title,
+    this.description,
+    required this.miniCheckpoints,
+  });
+
+  factory CheckpointMaster.fromJson(Map<String, dynamic> json) {
+    return CheckpointMaster(
+      checkpointId: json['checkpoint_id'] as String,
+      category: json['category'] as String,
+      title: json['title'] as String,
+      description: json['description'] as String?,
+      miniCheckpoints: List<String>.from(json['mini_checkpoints'] ?? []),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'checkpoint_id': checkpointId,
+      'category': category,
+      'title': title,
+      'description': description,
+      'mini_checkpoints': miniCheckpoints,
+    };
+  }
+}
+
+class ProspectCheckpoint {
+  final String id;
+  final String prospectId;
+  final String checkpointId;
+  final bool checked;
+  final Map<String, String> miniCheckpointAnswers;
+  final CheckpointMaster? checkpoint;
+
+  const ProspectCheckpoint({
+    required this.id,
+    required this.prospectId,
+    required this.checkpointId,
+    required this.checked,
+    required this.miniCheckpointAnswers,
+    this.checkpoint,
+  });
+
+  factory ProspectCheckpoint.fromJson(Map<String, dynamic> json) {
+    return ProspectCheckpoint(
+      id: json['id'] as String,
+      prospectId: json['prospect_id'] as String,
+      checkpointId: json['checkpoint_id'] as String,
+      checked: json['checked'] as bool? ?? false,
+      miniCheckpointAnswers: Map<String, String>.from(json['mini_checkpoint_answers'] ?? {}),
+      checkpoint: json['checkpoint'] != null
+          ? CheckpointMaster.fromJson(json['checkpoint'] as Map<String, dynamic>)
+          : null,
+    );
+  }
+
+  ProspectCheckpoint copyWith({
+    String? id,
+    String? prospectId,
+    String? checkpointId,
+    bool? checked,
+    Map<String, String>? miniCheckpointAnswers,
+    CheckpointMaster? checkpoint,
+  }) {
+    return ProspectCheckpoint(
+      id: id ?? this.id,
+      prospectId: prospectId ?? this.prospectId,
+      checkpointId: checkpointId ?? this.checkpointId,
+      checked: checked ?? this.checked,
+      miniCheckpointAnswers: miniCheckpointAnswers ?? this.miniCheckpointAnswers,
+      checkpoint: checkpoint ?? this.checkpoint,
+    );
+  }
+}
+
+
 class MatchReasoningResult {
   final String productId;
   final String prospectId;
@@ -874,6 +960,35 @@ class ConversationService {
       '${ApiConfig.baseUrl}/conversations/prospect/$prospectId/assign-banker',
       data: {'banker_id': bankerId},
     );
+  }
+
+  Future<List<ProspectCheckpoint>> getProspectCheckpoints(String prospectId) async {
+    final response = await _dio.get(
+      '${ApiConfig.baseUrl}/conversations/prospect/$prospectId/checkpoints',
+    );
+    final data = response.data;
+    if (data is! List) {
+      return [];
+    }
+    return (data as List)
+        .map((item) => ProspectCheckpoint.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<ProspectCheckpoint> updateProspectCheckpoint(
+    String prospectId,
+    String checkpointId, {
+    bool? checked,
+    Map<String, String>? miniAnswers,
+  }) async {
+    final response = await _dio.patch(
+      '${ApiConfig.baseUrl}/conversations/prospect/$prospectId/checkpoints/$checkpointId',
+      data: {
+        if (checked != null) 'checked': checked,
+        if (miniAnswers != null) 'mini_checkpoint_answers': miniAnswers,
+      },
+    );
+    return ProspectCheckpoint.fromJson(response.data as Map<String, dynamic>);
   }
 }
 

@@ -958,12 +958,16 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
   bool _loadingProducts = false;
   List<String> _suggestedQuestions = [];
   bool _loadingQuestions = false;
+  List<ProspectCheckpoint> _checkpoints = [];
+  bool _loadingCheckpoints = false;
+  final Map<String, bool> _expandedCategories = {};
 
   @override
   void initState() {
     super.initState();
     _fetchProducts();
     _fetchSuggestedQuestions();
+    _fetchCheckpoints();
   }
 
   @override
@@ -972,6 +976,50 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
     if (oldWidget.prospectId != widget.prospectId) {
       _fetchProducts();
       _fetchSuggestedQuestions();
+      _fetchCheckpoints();
+    }
+  }
+
+  Future<void> _fetchCheckpoints() async {
+    if (!mounted) return;
+    setState(() {
+      _loadingCheckpoints = true;
+    });
+    try {
+      final list = await ConversationService().getProspectCheckpoints(widget.prospectId);
+      
+      // Sort numerically by checkpoint number: e.g. "checkpoint_12" -> 12
+      list.sort((a, b) {
+        final regExp = RegExp(r'\d+');
+        final matchA = regExp.firstMatch(a.checkpointId);
+        final matchB = regExp.firstMatch(b.checkpointId);
+        if (matchA != null && matchB != null) {
+          final intA = int.parse(matchA.group(0)!);
+          final intB = int.parse(matchB.group(0)!);
+          return intA.compareTo(intB);
+        }
+        return a.checkpointId.compareTo(b.checkpointId);
+      });
+
+      if (mounted) {
+        setState(() {
+          _checkpoints = list;
+          if (list.isNotEmpty) {
+            final firstCat = list.first.checkpoint?.category;
+            if (firstCat != null) {
+              _expandedCategories[firstCat] = true;
+            }
+          }
+          _loadingCheckpoints = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching checkpoints: $e');
+      if (mounted) {
+        setState(() {
+          _loadingCheckpoints = false;
+        });
+      }
     }
   }
 
@@ -1279,6 +1327,489 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
     }
   }
 
+  Future<void> _toggleMajorCheckpoint(ProspectCheckpoint cp) async {
+    final nextChecked = !cp.checked;
+
+    // Optimistically update local state
+    setState(() {
+      final index = _checkpoints.indexWhere((c) => c.checkpointId == cp.checkpointId);
+      if (index != -1) {
+        final current = _checkpoints[index];
+        final updatedMinis = {...current.miniCheckpointAnswers};
+        if (current.checkpoint?.miniCheckpoints.isNotEmpty ?? false) {
+          for (final mini in current.checkpoint!.miniCheckpoints) {
+            updatedMinis[mini] = nextChecked ? 'yes' : 'no';
+          }
+        }
+        _checkpoints[index] = current.copyWith(
+          checked: nextChecked,
+          miniCheckpointAnswers: updatedMinis,
+        );
+      }
+    });
+
+    try {
+      final updated = await ConversationService().updateProspectCheckpoint(
+        widget.prospectId,
+        cp.checkpointId,
+        checked: nextChecked,
+      );
+      if (mounted) {
+        setState(() {
+          final index = _checkpoints.indexWhere((c) => c.checkpointId == cp.checkpointId);
+          if (index != -1) {
+            _checkpoints[index] = updated;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error toggling checkpoint: $e');
+      _fetchCheckpoints();
+    }
+  }
+
+  Future<void> _setMiniAnswer(ProspectCheckpoint cp, String mini, String value) async {
+    final index = _checkpoints.indexWhere((c) => c.checkpointId == cp.checkpointId);
+    if (index == -1) return;
+
+    final current = _checkpoints[index];
+    final updatedMinis = {...current.miniCheckpointAnswers};
+    updatedMinis[mini] = value;
+
+    bool allYes = false;
+    if (current.checkpoint?.miniCheckpoints.isNotEmpty ?? false) {
+      allYes = current.checkpoint!.miniCheckpoints.every((m) => updatedMinis[m] == 'yes');
+    }
+
+    // Optimistically update local state
+    setState(() {
+      _checkpoints[index] = current.copyWith(
+        checked: allYes,
+        miniCheckpointAnswers: updatedMinis,
+      );
+    });
+
+    try {
+      final updated = await ConversationService().updateProspectCheckpoint(
+        widget.prospectId,
+        cp.checkpointId,
+        miniAnswers: updatedMinis,
+      );
+      if (mounted) {
+        setState(() {
+          final idx = _checkpoints.indexWhere((c) => c.checkpointId == cp.checkpointId);
+          if (idx != -1) {
+            _checkpoints[idx] = updated;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error setting mini answer: $e');
+      _fetchCheckpoints();
+    }
+  }
+
+  Widget _buildTriStateButton({
+    required String label,
+    required bool isSelected,
+    required Color selectedBg,
+    required Color selectedFg,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+          decoration: BoxDecoration(
+            color: isSelected ? selectedBg : Colors.white,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: isSelected ? selectedBg : BankerColors.line2,
+              width: 1,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.bold,
+              color: isSelected ? selectedFg : BankerColors.muted,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildValidationCheckpointsSection() {
+    if (_loadingCheckpoints) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(BankerColors.blue),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_checkpoints.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final Map<String, List<ProspectCheckpoint>> grouped = {};
+    for (final cp in _checkpoints) {
+      final cat = cp.checkpoint?.category ?? 'Other';
+      grouped.putIfAbsent(cat, () => []).add(cp);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Validation Standard Checkpoints',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: BankerColors.navy,
+          ),
+        ),
+        const SizedBox(height: 2),
+        const Text(
+          'Mandatory validation checkpoints before article approval for AI systems',
+          style: TextStyle(
+            fontSize: 10,
+            color: BankerColors.muted,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...grouped.entries.map((entry) {
+          final category = entry.key;
+          final cps = entry.value;
+          final isExpanded = _expandedCategories[category] ?? false;
+
+          final checkedCount = cps.where((c) => c.checked).length;
+          final totalCount = cps.length;
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(
+              color: BankerColors.cream,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: BankerColors.line2),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _expandedCategories[category] = !isExpanded;
+                    });
+                  },
+                  borderRadius: isExpanded
+                      ? const BorderRadius.vertical(top: Radius.circular(10))
+                      : BorderRadius.circular(10),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                category.toUpperCase(),
+                                style: const TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: BankerColors.navy,
+                                  letterSpacing: 0.8,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '$checkedCount of $totalCount checkpoints verified',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: checkedCount == totalCount
+                                      ? const Color(0xFF0F6E56)
+                                      : BankerColors.muted2,
+                                  fontWeight: checkedCount == totalCount
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          isExpanded ? Icons.expand_less : Icons.expand_more,
+                          size: 16,
+                          color: BankerColors.muted,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (isExpanded) ...[
+                  const Divider(height: 1, color: BankerColors.line2),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 10, right: 10, top: 8, bottom: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Column header table for aligning labels
+                        Table(
+                          columnWidths: const {
+                            0: FixedColumnWidth(46), // checkbox/indent width
+                            1: FlexColumnWidth(4),
+                            2: FixedColumnWidth(110),
+                          },
+                          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                          children: [
+                            const TableRow(
+                              decoration: BoxDecoration(
+                                color: Colors.transparent,
+                              ),
+                              children: [
+                                Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                                  child: Center(
+                                    child: Text(
+                                      'STATUS',
+                                      style: TextStyle(
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.bold,
+                                        color: BankerColors.muted,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                                  child: Text(
+                                    'CHECKPOINT REQUIREMENT',
+                                    style: TextStyle(
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.bold,
+                                      color: BankerColors.muted,
+                                    ),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                                  child: Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Text(
+                                      'VERIFICATION',
+                                      style: TextStyle(
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.bold,
+                                        color: BankerColors.muted,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        // Checkpoint cards list
+                        ...cps.map((cp) {
+                          final title = cp.checkpoint?.title ?? cp.checkpointId;
+                          final description = cp.checkpoint?.description;
+                          final hasMinis = cp.checkpoint?.miniCheckpoints.isNotEmpty ?? false;
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: BankerColors.line2, width: 0.5),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: Table(
+                              columnWidths: const {
+                                0: FixedColumnWidth(46), // checkbox/indent width
+                                1: FlexColumnWidth(4),
+                                2: FixedColumnWidth(110),
+                              },
+                              defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                              children: [
+                                // Major Checkpoint Row
+                                TableRow(
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    border: hasMinis
+                                        ? const Border(bottom: BorderSide(color: BankerColors.line, width: 0.5))
+                                        : null,
+                                  ),
+                                  children: [
+                                    // Col 1: Checkbox
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 8),
+                                      child: Center(
+                                        child: GestureDetector(
+                                          onTap: () => _toggleMajorCheckpoint(cp),
+                                          child: MouseRegion(
+                                            cursor: SystemMouseCursors.click,
+                                            child: Container(
+                                              width: 15,
+                                              height: 15,
+                                              decoration: BoxDecoration(
+                                                color: cp.checked ? BankerColors.blue : Colors.transparent,
+                                                borderRadius: BorderRadius.circular(4),
+                                                border: Border.all(
+                                                  color: cp.checked ? BankerColors.blue : BankerColors.muted2,
+                                                  width: 1.5,
+                                                ),
+                                              ),
+                                              alignment: Alignment.center,
+                                              child: cp.checked
+                                                  ? const Icon(Icons.check, size: 10, color: Colors.white)
+                                                  : null,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    // Col 2: Text Title & Description
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            title,
+                                            style: const TextStyle(
+                                              fontSize: 10.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: BankerColors.ink,
+                                            ),
+                                          ),
+                                          if (description != null && description.isNotEmpty) ...[
+                                            const SizedBox(height: 1),
+                                            Text(
+                                              description,
+                                              style: const TextStyle(
+                                                fontSize: 9.5,
+                                                color: BankerColors.muted,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                    // Col 3: Done icon or empty
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                                      child: Align(
+                                        alignment: Alignment.centerRight,
+                                        child: cp.checked
+                                            ? const Icon(Icons.check_circle_outline, size: 14, color: BankerColors.green)
+                                            : const SizedBox.shrink(),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                // Mini Checkpoint Rows
+                                if (hasMinis) ...[
+                                  ...cp.checkpoint!.miniCheckpoints.asMap().entries.map((miniEntry) {
+                                    final miniIdx = miniEntry.key;
+                                    final mini = miniEntry.value;
+                                    final isLastMini = miniIdx == cp.checkpoint!.miniCheckpoints.length - 1;
+                                    final answer = cp.miniCheckpointAnswers[mini] ?? 'no';
+
+                                    return TableRow(
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        border: isLastMini
+                                            ? null
+                                            : const Border(bottom: BorderSide(color: BankerColors.line, width: 0.5)),
+                                      ),
+                                      children: [
+                                        // Col 1: Custom circular dot bullet
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 8),
+                                          child: Center(
+                                            child: Container(
+                                              width: 6,
+                                              height: 6,
+                                              decoration: BoxDecoration(
+                                                color: BankerColors.muted2.withOpacity(0.55),
+                                                shape: BoxShape.circle,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        // Col 2: Mini requirement text
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                                          child: Text(
+                                            mini,
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                              color: BankerColors.ink,
+                                            ),
+                                          ),
+                                        ),
+                                        // Col 3: Tri-state buttons (Yes / No)
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                                          child: Align(
+                                            alignment: Alignment.centerRight,
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                _buildTriStateButton(
+                                                  label: 'Yes',
+                                                  isSelected: answer == 'yes',
+                                                  selectedBg: BankerColors.greenSoft,
+                                                  selectedFg: const Color(0xFF0F6E56),
+                                                  onTap: () => _setMiniAnswer(cp, mini, 'yes'),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                _buildTriStateButton(
+                                                  label: 'No',
+                                                  isSelected: answer == 'no',
+                                                  selectedBg: BankerColors.redSoft,
+                                                  selectedFg: const Color(0xFF991B1B),
+                                                  onTap: () => _setMiniAnswer(cp, mini, 'no'),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  }),
+                                ],
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          );
+        }).toList(),
+      ],
+    );
+  }
+
   Widget _buildNextStepsTab(CrmProspect prospect) {
     final docsTotal = prospect.docsTotalCount;
     final docsReceived = prospect.docsReceivedCount;
@@ -1376,6 +1907,10 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
             ),
           ],
         ),
+        const SizedBox(height: 18),
+
+        // Checkpoints Section
+        _buildValidationCheckpointsSection(),
         const SizedBox(height: 18),
 
         // 2. Documents Requested Section
