@@ -54,6 +54,8 @@ class ProspectInitResult {
   final ProspectClassification? classification;
   final Map<String, dynamic> profileSnapshot;
   final String? bankerId;
+  final String? bankerName;
+  final String? bankerPosition;
 
   ProspectInitResult({
     required this.prospectId,
@@ -73,6 +75,8 @@ class ProspectInitResult {
     this.classification,
     this.profileSnapshot = const {},
     this.bankerId,
+    this.bankerName,
+    this.bankerPosition,
   });
 
   Map<String, dynamic> toDynamicVariables({bool lockProfileFields = false}) {
@@ -438,6 +442,40 @@ class MatchReasoningResult {
   }
 }
 
+
+class DirectMessage {
+  final String messageId;
+  final String prospectId;
+  final String bankerId;
+  final String sender;
+  final String content;
+  final DateTime createdAt;
+  final DateTime? readAt;
+
+  const DirectMessage({
+    required this.messageId,
+    required this.prospectId,
+    required this.bankerId,
+    required this.sender,
+    required this.content,
+    required this.createdAt,
+    this.readAt,
+  });
+
+  factory DirectMessage.fromJson(Map<String, dynamic> json) {
+    return DirectMessage(
+      messageId: json['message_id'] as String,
+      prospectId: json['prospect_id'] as String,
+      bankerId: json['banker_id'] as String,
+      sender: json['sender'] as String,
+      content: json['content'] as String,
+      createdAt: DateTime.parse(json['created_at'] as String).toLocal(),
+      readAt: json['read_at'] != null ? DateTime.parse(json['read_at'] as String).toLocal() : null,
+    );
+  }
+}
+
+
 class ConversationService {
   final Dio _dio = Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 60),
@@ -538,6 +576,8 @@ class ConversationService {
           const {},
       profileSnapshot: data['profile_snapshot'] as Map<String, dynamic>? ?? const {},
       bankerId: data['banker_id'] as String?,
+      bankerName: data['banker_name'] as String?,
+      bankerPosition: data['banker_position'] as String?,
     );
   }
 
@@ -573,6 +613,8 @@ class ConversationService {
           const {},
       profileSnapshot: data['profile_snapshot'] as Map<String, dynamic>? ?? const {},
       bankerId: data['banker_id'] as String?,
+      bankerName: data['banker_name'] as String?,
+      bankerPosition: data['banker_position'] as String?,
     );
   }
 
@@ -610,6 +652,8 @@ class ConversationService {
           const {},
       profileSnapshot: data['profile_snapshot'] as Map<String, dynamic>? ?? const {},
       bankerId: data['banker_id'] as String?,
+      bankerName: data['banker_name'] as String?,
+      bankerPosition: data['banker_position'] as String?,
       classification: classificationData == null
           ? null
           : ProspectClassification(
@@ -708,6 +752,7 @@ class ConversationService {
     String userMessage, {
     String? prospectId,
     Map<String, dynamic> context = const {},
+    bool isBanker = false,
   }) async {
     final response = await _dio.post(
       '${ApiConfig.baseUrl}/conversations/relationship-hub/chat',
@@ -715,6 +760,7 @@ class ConversationService {
         'user_message': userMessage,
         if (prospectId != null) 'prospect_id': prospectId,
         'context': context,
+        'is_banker': isBanker,
       },
     );
     final data = response.data as Map<String, dynamic>;
@@ -879,6 +925,8 @@ class ConversationService {
             const {},
         profileSnapshot: data['profile_snapshot'] as Map<String, dynamic>? ?? const {},
         bankerId: data['banker_id'] as String?,
+        bankerName: data['banker_name'] as String?,
+        bankerPosition: data['banker_position'] as String?,
         classification: classificationData == null
             ? null
             : ProspectClassification(
@@ -990,7 +1038,36 @@ class ConversationService {
     );
     return ProspectCheckpoint.fromJson(response.data as Map<String, dynamic>);
   }
+
+  Future<List<DirectMessage>> getDirectMessages(String prospectId) async {
+    final response = await _dio.get(
+      '${ApiConfig.baseUrl}/conversations/prospect/$prospectId/messages',
+    );
+    final data = response.data;
+    if (data is! List) {
+      return [];
+    }
+    return data
+        .map((item) => DirectMessage.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<DirectMessage> sendDirectMessage(
+    String prospectId,
+    String sender,
+    String content,
+  ) async {
+    final response = await _dio.post(
+      '${ApiConfig.baseUrl}/conversations/prospect/$prospectId/messages',
+      data: {
+        'sender': sender,
+        'content': content,
+      },
+    );
+    return DirectMessage.fromJson(response.data as Map<String, dynamic>);
+  }
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Cache for Prospect and Product data to prevent transitions loading spinners

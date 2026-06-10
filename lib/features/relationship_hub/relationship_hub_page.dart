@@ -53,6 +53,15 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
   List<ProductPublic> _products = [];
   bool _loadingProducts = false;
   bool _chatExpanded = false;
+  bool _inDirectMessagingMode = false;
+  final FocusNode _chatFocusNode = FocusNode();
+
+
+  @override
+  void dispose() {
+    _chatFocusNode.dispose();
+    super.dispose();
+  }
 
   static const _defaultCompany = 'Launchpad';
   static const _defaultFounder = 'Profile';
@@ -158,6 +167,24 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
       _prospect?.email ??
       widget.dynamicVariables['userEmail']?.toString() ??
       '';
+
+  String get _bankerName =>
+      _prospect?.bankerName ??
+      'Sarah Chen';
+
+  String get _bankerPosition =>
+      _prospect?.bankerPosition ??
+      'Innovation Banking';
+
+
+  void _onMessageTap() {
+    setState(() {
+      _chatExpanded = true;
+      _inDirectMessagingMode = true;
+    });
+    _chatFocusNode.requestFocus();
+  }
+
 
   String get _industry =>
       _prospect?.industry ??
@@ -288,7 +315,10 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const _NotificationsSection(),
+                  _NotificationsSection(
+                    bankerName: _bankerName,
+                    bankerPosition: _bankerPosition,
+                  ),
                   Expanded(
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -305,6 +335,9 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
                             onTapProduct: _showProductModal,
                             onTapLearning: _showLearningModal,
                             products: _products,
+                            bankerName: _bankerName,
+                            bankerPosition: _bankerPosition,
+                            onMessageTap: _onMessageTap,
                           ),
                         ),
                         SizedBox(
@@ -316,6 +349,14 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
                             industry: _industry,
                             stageLabel: _stageLabel,
                             priorities: _priorities,
+                            bankerName: _bankerName,
+                            focusNode: _chatFocusNode,
+                            inDirectMessagingMode: _inDirectMessagingMode,
+                            onBackToNova: () {
+                              setState(() {
+                                _inDirectMessagingMode = false;
+                              });
+                            },
                           ),
                         ),
                       ],
@@ -335,6 +376,9 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
                 trailingPanel: null, // Chat is shown in floating bottom sheet instead!
                 onTapProduct: _showProductModal,
                 onTapLearning: _showLearningModal,
+                bankerName: _bankerName,
+                bankerPosition: _bankerPosition,
+                onMessageTap: _onMessageTap,
               );
 
     final scaffold = Scaffold(
@@ -462,6 +506,14 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
                           stageLabel: _stageLabel,
                           priorities: _priorities,
                           onClose: () => setState(() => _chatExpanded = false),
+                          bankerName: _bankerName,
+                          focusNode: _chatFocusNode,
+                          inDirectMessagingMode: _inDirectMessagingMode,
+                          onBackToNova: () {
+                            setState(() {
+                              _inDirectMessagingMode = false;
+                            });
+                          },
                         ),
                       ),
                     ],
@@ -482,8 +534,55 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
 }
 
 
+NotificationItem _localizeNotification(NotificationItem item, String bankerName) {
+  final firstName = bankerName.split(' ').first;
+  final uppercaseFirst = firstName.toUpperCase();
+
+  String replaceName(String text) {
+    return text
+        .replaceAll('Sarah Chen', bankerName)
+        .replaceAll('Sarah', firstName)
+        .replaceAll('SARAH', uppercaseFirst)
+        .replaceAll('Sarah\'s', "$firstName's");
+  }
+
+  String? replaceNameOpt(String? text) {
+    if (text == null) return null;
+    return replaceName(text);
+  }
+
+  return NotificationItem(
+    title: replaceName(item.title),
+    message: replaceName(item.message),
+    footer: replaceName(item.footer),
+    time: item.time,
+    icon: item.icon,
+    iconColor: item.iconColor,
+    bg: item.bg,
+    isPriority: item.isPriority,
+    detail: item.detail == null
+        ? null
+        : NotificationDetail(
+            headerLabel: replaceNameOpt(item.detail!.headerLabel),
+            sections: item.detail!.sections.map((sec) {
+              return NotificationDetailSection(
+                icon: sec.icon,
+                title: replaceName(sec.title),
+                bullets: sec.bullets.map((b) => replaceName(b)).toList(),
+              );
+            }).toList(),
+          ),
+  );
+}
+
 class _NotificationsSection extends StatefulWidget {
-  const _NotificationsSection();
+  final String bankerName;
+  final String bankerPosition;
+
+  const _NotificationsSection({
+    required this.bankerName,
+    required this.bankerPosition,
+  });
 
   @override
   State<_NotificationsSection> createState() => _NotificationsSectionState();
@@ -530,7 +629,9 @@ class _NotificationsSectionState extends State<_NotificationsSection> {
 
   @override
   Widget build(BuildContext context) {
-    final activeItems = _notifService.activeHubNotifications;
+    final activeItems = _notifService.activeHubNotifications.map((item) {
+      return _localizeNotification(item, widget.bankerName);
+    }).toList();
     final isMobile = MediaQuery.of(context).size.width < 768;
     if (activeItems.isEmpty) {
       return const SizedBox.shrink();
@@ -617,6 +718,15 @@ class _NotificationsSectionState extends State<_NotificationsSection> {
   }
 }
 
+String _getInitials(String name) {
+  if (name.trim().isEmpty) return '';
+  final parts = name.trim().split(' ');
+  if (parts.length > 1) {
+    return '${parts[0][0]}${parts[parts.length - 1][0]}'.toUpperCase();
+  }
+  return parts[0][0].toUpperCase();
+}
+
 class _HubMainColumn extends StatefulWidget {
   final String companyName;
   final String founderName;
@@ -627,6 +737,9 @@ class _HubMainColumn extends StatefulWidget {
   final String email;
   final Widget? trailingPanel;
   final void Function(BuildContext context, ProductPublic product)? onTapProduct;
+  final String bankerName;
+  final String bankerPosition;
+  final VoidCallback onMessageTap;
 
   final List<ProductPublic> products;
 
@@ -637,6 +750,9 @@ class _HubMainColumn extends StatefulWidget {
     required this.stageLabel,
     required this.priorities,
     required this.products,
+    required this.bankerName,
+    required this.bankerPosition,
+    required this.onMessageTap,
     this.prospectId,
     this.email = '',
     this.trailingPanel,
@@ -774,7 +890,11 @@ class _HubMainColumnState extends State<_HubMainColumn> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // On mobile, show notifications inside the scroll view
-          if (!isDesktop) const _NotificationsSection(),
+          if (!isDesktop)
+            _NotificationsSection(
+              bankerName: widget.bankerName,
+              bankerPosition: widget.bankerPosition,
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
             child: Column(
@@ -835,9 +955,9 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                                   ],
                                 ),
                                 const SizedBox(height: 12),
-                                const Text(
-                                  'Intro call with Sarah Chen',
-                                  style: TextStyle(
+                                Text(
+                                  'Intro call with ${widget.bankerName}',
+                                  style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 19,
                                     fontWeight: FontWeight.w700,
@@ -922,8 +1042,8 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                                       backgroundColor:
                                           AppThemeTokens.modalHeader,
                                       child: Text(
-                                        'SC',
-                                        style: TextStyle(
+                                        _getInitials(widget.bankerName),
+                                        style: const TextStyle(
                                           color: AppThemeTokens.goldAccent,
                                           fontWeight: FontWeight.w700,
                                         ),
@@ -934,18 +1054,18 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                                       child: Column(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
-                                        children: const [
+                                        children: [
                                           Text(
-                                            'Sarah Chen',
-                                            style: TextStyle(
+                                            widget.bankerName,
+                                            style: const TextStyle(
                                               fontWeight: FontWeight.w700,
                                               fontSize: 17,
                                             ),
                                           ),
-                                          SizedBox(height: 2),
+                                          const SizedBox(height: 2),
                                           Text(
-                                            'Innovation Banking',
-                                            style: TextStyle(
+                                            widget.bankerPosition,
+                                            style: const TextStyle(
                                               fontSize: 12,
                                               color: Color(0xFF6B7280),
                                             ),
@@ -960,11 +1080,11 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                                   children: [
                                     Expanded(
                                       child: _MiniActionButton(
-                                        label: 'Contact',
+                                        label: 'Message',
                                         dark: true,
-                                        icon: Icons.email_outlined,
+                                        icon: Icons.chat_bubble_outline_rounded,
                                         onTap: () {
-                                          html.window.location.href = 'mailto:sarahchen@bank.ai';
+                                          widget.onMessageTap();
                                         },
                                       ),
                                     ),
@@ -1023,14 +1143,14 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                                             style: TextStyle(
                                               color: AppThemeTokens.goldAccent,
                                               fontSize: 10,
-                                              letterSpacing: 1.1,
+                                          letterSpacing: 1.1,
                                               fontWeight: FontWeight.w700,
                                             ),
                                           ),
                                           const SizedBox(height: 5),
-                                          const Text(
-                                            'Intro call with Sarah Chen',
-                                            style: TextStyle(
+                                          Text(
+                                            'Intro call with ${widget.bankerName}',
+                                            style: const TextStyle(
                                               color: Colors.white,
                                               fontSize: 19,
                                               fontWeight: FontWeight.w700,
@@ -1113,8 +1233,8 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                                           backgroundColor:
                                               AppThemeTokens.modalHeader,
                                           child: Text(
-                                            'SC',
-                                            style: TextStyle(
+                                            _getInitials(widget.bankerName),
+                                            style: const TextStyle(
                                               color: AppThemeTokens.goldAccent,
                                               fontWeight: FontWeight.w700,
                                             ),
@@ -1125,18 +1245,18 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                                           child: Column(
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
-                                            children: const [
+                                            children: [
                                               Text(
-                                                'Sarah Chen',
-                                                style: TextStyle(
+                                                widget.bankerName,
+                                                style: const TextStyle(
                                                   fontWeight: FontWeight.w700,
                                                   fontSize: 17,
                                                 ),
                                               ),
-                                              SizedBox(height: 2),
+                                              const SizedBox(height: 2),
                                               Text(
-                                                'Innovation Banking',
-                                                style: TextStyle(
+                                                widget.bankerPosition,
+                                                style: const TextStyle(
                                                   fontSize: 12,
                                                   color: Color(0xFF6B7280),
                                                 ),
@@ -1151,11 +1271,11 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                                       children: [
                                         Expanded(
                                           child: _MiniActionButton(
-                                            label: 'Contact',
+                                            label: 'Message',
                                             dark: true,
-                                            icon: Icons.email_outlined,
+                                            icon: Icons.chat_bubble_outline_rounded,
                                             onTap: () {
-                                              html.window.location.href = 'mailto:sarahchen@bank.ai';
+                                              widget.onMessageTap();
                                             },
                                           ),
                                         ),
@@ -1419,6 +1539,9 @@ class _AiGuidePanel extends StatefulWidget {
   final String? customActionLabel;
   final VoidCallback? onCustomActionTap;
   final String? bankerName;
+  final FocusNode? focusNode;
+  final bool inDirectMessagingMode;
+  final VoidCallback? onBackToNova;
 
   const _AiGuidePanel({
     this.prospectId,
@@ -1431,6 +1554,9 @@ class _AiGuidePanel extends StatefulWidget {
     this.customActionLabel,
     this.onCustomActionTap,
     this.bankerName,
+    this.focusNode,
+    this.inDirectMessagingMode = false,
+    this.onBackToNova,
   });
 
   @override
@@ -1443,7 +1569,9 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
   final ScrollController _scrollController = ScrollController();
   final ScrollController _historyScrollController = ScrollController();
   final ScrollController _conversationalScrollController = ScrollController();
-  final FocusNode _focusNode = FocusNode();
+  FocusNode? _localFocusNode;
+  FocusNode get _focusNode => widget.focusNode ?? (_localFocusNode ??= FocusNode());
+  final FocusNode _keyboardListenerFocusNode = FocusNode();
   bool _sending = false;
   String get _bankerFirstName {
     final name = widget.bankerName ?? 'Sarah Chen';
@@ -1463,19 +1591,74 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
   bool _loadingVoiceConversations = false;
   String _activeBankerTab = 'conversational';
 
+  // Direct Messaging State
+  List<DirectMessage> _directMessages = [];
+  bool _loadingDirectMessages = false;
+
+  bool _isDmUser(String sender) {
+    final isBankerView = widget.customActionLabel == 'Prospect Chats';
+    if (isBankerView) {
+      return sender == 'banker';
+    } else {
+      return sender == 'prospect';
+    }
+  }
+
+  List<_GuideMessage> get _dmGuideMessages {
+    return _directMessages.map((dm) {
+      return _GuideMessage(
+        isUser: _isDmUser(dm.sender),
+        text: dm.content,
+        isMarkdown: false,
+        animate: false,
+      );
+    }).toList();
+  }
+
+  Future<void> _loadDirectMessages() async {
+    if (widget.prospectId == null) return;
+    setState(() {
+      _loadingDirectMessages = true;
+    });
+    try {
+      final list = await _service.getDirectMessages(widget.prospectId!);
+      if (mounted) {
+        setState(() {
+          _directMessages = list;
+          _loadingDirectMessages = false;
+        });
+        _scrollToBottomInstant();
+      }
+    } catch (e) {
+      debugPrint('Error loading direct messages: $e');
+      if (mounted) {
+        setState(() {
+          _loadingDirectMessages = false;
+        });
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _resetWelcomeMessage();
     _loadBankerHistory();
+    if (widget.inDirectMessagingMode) {
+      _loadDirectMessages();
+    }
   }
 
   void _resetWelcomeMessage() {
+    final isBankerView = widget.customActionLabel == 'Prospect Chats';
+    final welcomeText = isBankerView
+        ? "I have context from ${widget.founderName}'s profile and the materials in ${widget.companyName}'s learning path. Ask me anything to prepare for this startup, suggest products, or review what matters most."
+        : "I have context from ${widget.founderName}'s profile and the materials in ${widget.companyName}'s learning path. Ask me anything about the next meeting, $_bankerFirstName's notes, or what matters most right now.";
+
     _messages = [
       _GuideMessage(
         isUser: false,
-        text:
-            "I have context from ${widget.founderName}'s profile and the materials in ${widget.companyName}'s learning path. Ask me anything about the next meeting, $_bankerFirstName's notes, or what matters most right now.",
+        text: welcomeText,
       ),
     ];
   }
@@ -1488,6 +1671,11 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
       setState(() {
         _resetWelcomeMessage();
       });
+    }
+    final isDmMode = widget.inDirectMessagingMode;
+    final wasDmMode = oldWidget.inDirectMessagingMode;
+    if (isDmMode && (!wasDmMode || oldWidget.prospectId != widget.prospectId)) {
+      _loadDirectMessages();
     }
   }
 
@@ -1598,13 +1786,51 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
     _scrollController.dispose();
     _historyScrollController.dispose();
     _conversationalScrollController.dispose();
-    _focusNode.dispose();
+    _localFocusNode?.dispose();
+    _keyboardListenerFocusNode.dispose();
     super.dispose();
   }
 
   Future<void> _sendMessage(String message) async {
     final trimmed = message.trim();
     if (trimmed.isEmpty || _sending) return;
+
+    final isDmMode = widget.inDirectMessagingMode;
+
+    if (isDmMode) {
+      final sender = widget.customActionLabel == 'Prospect Chats' ? 'banker' : 'prospect';
+      setState(() {
+        _sending = true;
+        _directMessages.add(DirectMessage(
+          messageId: '',
+          prospectId: widget.prospectId ?? '',
+          bankerId: '',
+          sender: sender,
+          content: trimmed,
+          createdAt: DateTime.now(),
+        ));
+      });
+      _controller.clear();
+      _scrollToBottom();
+
+      try {
+        await _service.sendDirectMessage(widget.prospectId!, sender, trimmed);
+        await _loadDirectMessages();
+      } catch (e) {
+        debugPrint('Error sending direct message: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to send message. Please try again.')),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _sending = false);
+          _focusNode.requestFocus();
+        }
+      }
+      return;
+    }
 
     setState(() {
       _sending = true;
@@ -1624,6 +1850,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
           'stage_label': widget.stageLabel,
           'priorities': widget.priorities,
         },
+        isBanker: widget.customActionLabel == 'Prospect Chats',
       );
 
       if (!mounted) return;
@@ -1788,6 +2015,78 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
   Widget _buildHeader() {
     final isBankerChats = widget.customActionLabel == 'Prospect Chats';
 
+    if (widget.inDirectMessagingMode) {
+      return Container(
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: Color(0xFFE7DCC8))),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.chat_bubble_outline_rounded,
+              color: AppThemeTokens.buttonPrimary,
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                isBankerChats
+                    ? "Chat with ${widget.companyName}"
+                    : "Chat with ${widget.bankerName ?? 'your Banker'}",
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppThemeTokens.modalHeader,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () {
+                widget.onBackToNova?.call();
+              },
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppThemeTokens.buttonPrimary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: AppThemeTokens.buttonPrimary.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.arrow_back_rounded,
+                        size: 13,
+                        color: AppThemeTokens.buttonPrimary,
+                      ),
+                      SizedBox(width: 5),
+                      Text(
+                        'Back to Nova',
+                        style: TextStyle(
+                          color: AppThemeTokens.buttonPrimary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
       decoration: const BoxDecoration(
@@ -1806,9 +2105,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
           ),
           const SizedBox(width: 8),
           Text(
-            isBankerChats
-                ? (_viewingHistory ? 'Prospect Chat History' : 'Nova')
-                : (_viewingHistory ? 'Chat History' : 'Nova'),
+            _viewingHistory ? 'Chat History' : 'Nova',
             style: const TextStyle(
               color: AppThemeTokens.modalHeader,
               fontWeight: FontWeight.w700,
@@ -1849,7 +2146,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
                     Text(
                       _viewingHistory
                           ? 'Back to Nova'
-                          : (isBankerChats ? 'Prospect Chat History' : 'Chat History'),
+                          : 'Chat History',
                       style: const TextStyle(
                         color: AppThemeTokens.buttonPrimary,
                         fontSize: 11,
@@ -1965,7 +2262,54 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
     );
   }
 
+  Widget _buildEmptyDmPlaceholder() {
+    final isBanker = widget.customActionLabel == 'Prospect Chats';
+    final targetName = isBanker ? widget.companyName : (widget.bankerName ?? 'your Banker');
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.chat_bubble_outline_rounded,
+              size: 40,
+              color: Color(0xFF9CA3AF),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              "Send a message to start chatting with $targetName.",
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF6B7280),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildChatBody() {
+    final isDmMode = widget.inDirectMessagingMode;
+
+    if (isDmMode && _loadingDirectMessages && _directMessages.isEmpty) {
+      return const Center(
+        child: CircularProgressIndicator(
+          strokeWidth: 2.5,
+          valueColor: AlwaysStoppedAnimation<Color>(AppThemeTokens.goldAccent),
+        ),
+      );
+    }
+
+    if (isDmMode && _directMessages.isEmpty) {
+      return _buildEmptyDmPlaceholder();
+    }
+
+    final messagesToDisplay = isDmMode ? _dmGuideMessages : _messages;
+
     return Container(
       color: const Color(0xFFFAFAF8),
       child: SingleChildScrollView(
@@ -1974,10 +2318,10 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ...List.generate(_messages.length, (i) {
-              final msg = _messages[i];
-              final isPrevSame = i > 0 && _messages[i - 1].isUser == msg.isUser;
-              final isNextSame = i < _messages.length - 1 && _messages[i + 1].isUser == msg.isUser;
+            ...List.generate(messagesToDisplay.length, (i) {
+              final msg = messagesToDisplay[i];
+              final isPrevSame = i > 0 && messagesToDisplay[i - 1].isUser == msg.isUser;
+              final isNextSame = i < messagesToDisplay.length - 1 && messagesToDisplay[i + 1].isUser == msg.isUser;
               return Padding(
                 padding: EdgeInsets.only(top: isPrevSame ? 2 : 10, bottom: 1),
                 child: _GuideMessageBubble(
@@ -2118,9 +2462,10 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
                 children: [
                   Expanded(
                     child: KeyboardListener(
-                      focusNode: _focusNode,
+                      focusNode: _keyboardListenerFocusNode,
                       onKeyEvent: _handleKeyEvent,
                       child: TextField(
+                        focusNode: _focusNode,
                         controller: _controller,
                         enabled: !_sending,
                         onSubmitted: _sendMessage,
@@ -2131,13 +2476,17 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
                           color: Color(0xFF1F2937),
                           fontSize: 14,
                         ),
-                        decoration: const InputDecoration(
-                          hintText: 'Ask about your materials…',
-                          hintStyle: TextStyle(color: Color(0xFF8D8578)),
+                        decoration: InputDecoration(
+                          hintText: widget.inDirectMessagingMode
+                              ? (widget.customActionLabel == 'Prospect Chats'
+                                  ? 'Write a message for ${widget.companyName}…'
+                                  : 'Write a message for ${widget.bankerName ?? 'your Banker'}…')
+                              : 'Ask about your materials…',
+                          hintStyle: const TextStyle(color: Color(0xFF8D8578)),
                           border: InputBorder.none,
                           enabledBorder: InputBorder.none,
                           focusedBorder: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(
+                          contentPadding: const EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 14,
                           ),
@@ -5869,6 +6218,9 @@ class AiGuidePanel extends StatelessWidget {
   final String? customActionLabel;
   final VoidCallback? onCustomActionTap;
   final String? bankerName;
+  final FocusNode? focusNode;
+  final bool inDirectMessagingMode;
+  final VoidCallback? onBackToNova;
 
   const AiGuidePanel({
     super.key,
@@ -5882,6 +6234,9 @@ class AiGuidePanel extends StatelessWidget {
     this.customActionLabel,
     this.onCustomActionTap,
     this.bankerName,
+    this.focusNode,
+    this.inDirectMessagingMode = false,
+    this.onBackToNova,
   });
 
   @override
@@ -5897,16 +6252,29 @@ class AiGuidePanel extends StatelessWidget {
       customActionLabel: customActionLabel,
       onCustomActionTap: onCustomActionTap,
       bankerName: bankerName,
+      focusNode: focusNode,
+      inDirectMessagingMode: inDirectMessagingMode,
+      onBackToNova: onBackToNova,
     );
   }
 }
 
 class NotificationsSection extends StatelessWidget {
-  const NotificationsSection({super.key});
+  final String bankerName;
+  final String bankerPosition;
+
+  const NotificationsSection({
+    super.key,
+    this.bankerName = 'Sarah Chen',
+    this.bankerPosition = 'Innovation Banking',
+  });
 
   @override
   Widget build(BuildContext context) {
-    return const _NotificationsSection();
+    return _NotificationsSection(
+      bankerName: bankerName,
+      bankerPosition: bankerPosition,
+    );
   }
 }
 

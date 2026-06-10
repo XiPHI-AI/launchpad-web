@@ -939,12 +939,14 @@ class BankerDetailPanel extends ConsumerStatefulWidget {
   final String prospectId;
   final bool showBackButton;
   final VoidCallback? onClose;
+  final VoidCallback? onMessageTap;
 
   const BankerDetailPanel({
     super.key,
     required this.prospectId,
     this.showBackButton = false,
     this.onClose,
+    this.onMessageTap,
   });
 
   @override
@@ -1224,7 +1226,13 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
               ),
               const SizedBox(width: 6),
               OutlinedButton(
-                onPressed: () => _showMsgModal(context, prospect),
+                onPressed: () {
+                  if (widget.onMessageTap != null) {
+                    widget.onMessageTap!();
+                  } else {
+                    _showMsgModal(context, prospect);
+                  }
+                },
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   side: const BorderSide(color: BankerColors.line2),
@@ -4011,7 +4019,7 @@ class _StatItem {
   _StatItem({required this.value, required this.label, required this.sub, required this.subColor});
 }
 
-class BankerDetailPage extends ConsumerWidget {
+class BankerDetailPage extends ConsumerStatefulWidget {
   final String prospectId;
 
   const BankerDetailPage({
@@ -4020,7 +4028,14 @@ class BankerDetailPage extends ConsumerWidget {
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<BankerDetailPage> createState() => _BankerDetailPageState();
+}
+
+class _BankerDetailPageState extends ConsumerState<BankerDetailPage> {
+  bool _inDirectMessagingMode = false;
+
+  @override
+  Widget build(BuildContext context) {
     final bankersAsync = ref.watch(bankersProvider);
     final activeBanker = ref.watch(activeBankerProvider);
 
@@ -4059,9 +4074,9 @@ class BankerDetailPage extends ConsumerWidget {
     final prospects = ref.watch(bankerProspectsProvider);
     // Find matching prospect
     final prospect = prospects.firstWhere(
-      (p) => p.id == prospectId,
+      (p) => p.id == widget.prospectId,
       orElse: () => CrmProspect(
-        id: prospectId,
+        id: widget.prospectId,
         name: 'Prospect',
         email: '',
         sector: 'Fintech',
@@ -4124,15 +4139,20 @@ class BankerDetailPage extends ConsumerWidget {
                           Container(
                             color: Colors.white,
                             child: BankerDetailPanel(
-                              prospectId: prospectId,
+                              prospectId: widget.prospectId,
                               showBackButton: true,
+                              onMessageTap: () {
+                                setState(() {
+                                  _inDirectMessagingMode = true;
+                                });
+                              },
                             ),
                           ),
                           const Divider(height: 1, color: Color(0xFFE7DCC8)),
                           SizedBox(
                             height: 600,
                             child: AiGuidePanel(
-                              prospectId: prospectId,
+                              prospectId: widget.prospectId,
                               founderName: prospect.name,
                               companyName: prospect.name,
                               industry: prospect.sector,
@@ -4141,6 +4161,12 @@ class BankerDetailPage extends ConsumerWidget {
                               customActionLabel: 'Prospect Chats',
                               onCustomActionTap: () {},
                               bankerName: bankerName,
+                              inDirectMessagingMode: _inDirectMessagingMode,
+                              onBackToNova: () {
+                                setState(() {
+                                  _inDirectMessagingMode = false;
+                                });
+                              },
                             ),
                           ),
                         ],
@@ -4153,8 +4179,13 @@ class BankerDetailPage extends ConsumerWidget {
                           child: Container(
                             color: Colors.white,
                             child: BankerDetailPanel(
-                              prospectId: prospectId,
+                              prospectId: widget.prospectId,
                               showBackButton: true,
+                              onMessageTap: () {
+                                setState(() {
+                                  _inDirectMessagingMode = true;
+                                });
+                              },
                             ),
                           ),
                         ),
@@ -4162,7 +4193,7 @@ class BankerDetailPage extends ConsumerWidget {
                         SizedBox(
                           width: 420,
                           child: AiGuidePanel(
-                            prospectId: prospectId,
+                            prospectId: widget.prospectId,
                             founderName: prospect.name,
                             companyName: prospect.name,
                             industry: prospect.sector,
@@ -4171,6 +4202,12 @@ class BankerDetailPage extends ConsumerWidget {
                             customActionLabel: 'Prospect Chats',
                             onCustomActionTap: () {},
                             bankerName: bankerName,
+                            inDirectMessagingMode: _inDirectMessagingMode,
+                            onBackToNova: () {
+                              setState(() {
+                                _inDirectMessagingMode = false;
+                              });
+                            },
                           ),
                         ),
                       ],
