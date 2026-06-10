@@ -370,6 +370,7 @@ class ProspectCheckpoint {
   final String id;
   final String prospectId;
   final String checkpointId;
+  final String? documentId;
   final bool checked;
   final Map<String, String> miniCheckpointAnswers;
   final CheckpointMaster? checkpoint;
@@ -378,6 +379,7 @@ class ProspectCheckpoint {
     required this.id,
     required this.prospectId,
     required this.checkpointId,
+    this.documentId,
     required this.checked,
     required this.miniCheckpointAnswers,
     this.checkpoint,
@@ -388,6 +390,7 @@ class ProspectCheckpoint {
       id: json['id'] as String,
       prospectId: json['prospect_id'] as String,
       checkpointId: json['checkpoint_id'] as String,
+      documentId: json['document_id'] as String?,
       checked: json['checked'] as bool? ?? false,
       miniCheckpointAnswers: Map<String, String>.from(json['mini_checkpoint_answers'] ?? {}),
       checkpoint: json['checkpoint'] != null
@@ -400,6 +403,7 @@ class ProspectCheckpoint {
     String? id,
     String? prospectId,
     String? checkpointId,
+    String? documentId,
     bool? checked,
     Map<String, String>? miniCheckpointAnswers,
     CheckpointMaster? checkpoint,
@@ -408,9 +412,74 @@ class ProspectCheckpoint {
       id: id ?? this.id,
       prospectId: prospectId ?? this.prospectId,
       checkpointId: checkpointId ?? this.checkpointId,
+      documentId: documentId ?? this.documentId,
       checked: checked ?? this.checked,
       miniCheckpointAnswers: miniCheckpointAnswers ?? this.miniCheckpointAnswers,
       checkpoint: checkpoint ?? this.checkpoint,
+    );
+  }
+}
+
+class ProspectDocument {
+  final String documentId;
+  final String prospectId;
+  final String fileName;
+  final String version;
+  final String status;
+  final double confidenceScore;
+  final String? comparisonReport;
+  final String? previousVersionDocumentId;
+  final DateTime uploadedAt;
+
+  const ProspectDocument({
+    required this.documentId,
+    required this.prospectId,
+    required this.fileName,
+    required this.version,
+    required this.status,
+    required this.confidenceScore,
+    this.comparisonReport,
+    this.previousVersionDocumentId,
+    required this.uploadedAt,
+  });
+
+  factory ProspectDocument.fromJson(Map<String, dynamic> json) {
+    return ProspectDocument(
+      documentId: json['document_id'] as String,
+      prospectId: json['prospect_id'] as String,
+      fileName: json['file_name'] as String,
+      version: json['version'] as String,
+      status: json['status'] as String? ?? 'Pending',
+      confidenceScore: (json['confidence_score'] as num?)?.toDouble() ?? 0.20,
+      comparisonReport: json['comparison_report'] as String?,
+      previousVersionDocumentId: json['previous_version_document_id'] as String?,
+      uploadedAt: DateTime.parse(json['uploaded_at'] as String).toLocal(),
+    );
+  }
+}
+
+class DocumentAuditLog {
+  final String logId;
+  final String documentId;
+  final String action;
+  final String actor;
+  final DateTime performedAt;
+
+  const DocumentAuditLog({
+    required this.logId,
+    required this.documentId,
+    required this.action,
+    required this.actor,
+    required this.performedAt,
+  });
+
+  factory DocumentAuditLog.fromJson(Map<String, dynamic> json) {
+    return DocumentAuditLog(
+      logId: json['log_id'] as String,
+      documentId: json['document_id'] as String,
+      action: json['action'] as String,
+      actor: json['actor'] as String,
+      performedAt: DateTime.parse(json['performed_at'] as String).toLocal(),
     );
   }
 }
@@ -1065,6 +1134,76 @@ class ConversationService {
       },
     );
     return DirectMessage.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<List<ProspectDocument>> getDocumentList(String prospectId) async {
+    final response = await _dio.get(
+      '${ApiConfig.baseUrl}/conversations/prospect/$prospectId/documents',
+    );
+    final data = response.data;
+    if (data is! List) {
+      return [];
+    }
+    return data
+        .map((item) => ProspectDocument.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<ProspectCheckpoint>> getDocumentCheckpoints(String documentId) async {
+    final response = await _dio.get(
+      '${ApiConfig.baseUrl}/conversations/document/$documentId/checkpoints',
+    );
+    final data = response.data;
+    if (data is! List) {
+      return [];
+    }
+    return data
+        .map((item) => ProspectCheckpoint.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<ProspectCheckpoint> updateDocumentCheckpoint(
+    String documentId,
+    String checkpointId, {
+    bool? checked,
+    Map<String, String>? miniAnswers,
+  }) async {
+    final response = await _dio.patch(
+      '${ApiConfig.baseUrl}/conversations/document/$documentId/checkpoints/$checkpointId',
+      data: {
+        if (checked != null) 'checked': checked,
+        if (miniAnswers != null) 'mini_checkpoint_answers': miniAnswers,
+      },
+    );
+    return ProspectCheckpoint.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<ProspectDocument> updateDocumentStatus(
+    String documentId,
+    String status,
+    String actor,
+  ) async {
+    final response = await _dio.post(
+      '${ApiConfig.baseUrl}/conversations/document/$documentId/status',
+      data: {
+        'status': status,
+        'actor': actor,
+      },
+    );
+    return ProspectDocument.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<List<DocumentAuditLog>> getDocumentAuditLogs(String documentId) async {
+    final response = await _dio.get(
+      '${ApiConfig.baseUrl}/conversations/document/$documentId/audit-logs',
+    );
+    final data = response.data;
+    if (data is! List) {
+      return [];
+    }
+    return data
+        .map((item) => DocumentAuditLog.fromJson(item as Map<String, dynamic>))
+        .toList();
   }
 }
 

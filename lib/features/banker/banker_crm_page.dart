@@ -964,12 +964,23 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
   bool _loadingCheckpoints = false;
   final Map<String, bool> _expandedCategories = {};
 
+  List<ProspectDocument> _documents = [];
+  bool _loadingDocuments = false;
+  ProspectDocument? _selectedDocumentForAnalysis;
+  List<ProspectCheckpoint> _documentCheckpoints = [];
+  bool _loadingDocCheckpoints = false;
+  String _docDetailSubTab = 'checklist';
+  List<DocumentAuditLog> _documentAuditLogs = [];
+  bool _loadingAuditLogs = false;
+  final Map<String, bool> _expandedDocCategories = {};
+
   @override
   void initState() {
     super.initState();
     _fetchProducts();
     _fetchSuggestedQuestions();
     _fetchCheckpoints();
+    _fetchDocuments();
   }
 
   @override
@@ -979,6 +990,8 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
       _fetchProducts();
       _fetchSuggestedQuestions();
       _fetchCheckpoints();
+      _fetchDocuments();
+      _selectedDocumentForAnalysis = null;
     }
   }
 
@@ -1266,6 +1279,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
           child: Row(
             children: [
               _buildTabButton('Next steps', 'assign'),
+              _buildTabButton('Documents', 'documents'),
               _buildTabButton('Recommended products', 'products'),
               _buildTabButton('Suggested questions', 'questions'),
               _buildTabButton('Notes', 'notes'),
@@ -1324,6 +1338,8 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
     switch (_activeTab) {
       case 'assign':
         return _buildNextStepsTab(prospect);
+      case 'documents':
+        return _buildDocumentsTab(prospect);
       case 'products':
         return _buildRecommendedProductsTab(prospect);
       case 'questions':
@@ -1451,6 +1467,1182 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
       ),
     );
   }
+
+  Future<void> _fetchDocuments() async {
+    if (!mounted) return;
+    setState(() {
+      _loadingDocuments = true;
+    });
+    try {
+      final list = await ConversationService().getDocumentList(widget.prospectId);
+      if (mounted) {
+        setState(() {
+          _documents = list;
+          _loadingDocuments = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching documents: $e');
+      if (mounted) {
+        setState(() {
+          _loadingDocuments = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _selectDocumentForAnalysis(ProspectDocument doc) async {
+    setState(() {
+      _selectedDocumentForAnalysis = doc;
+      _loadingDocCheckpoints = true;
+      _documentCheckpoints = [];
+      _docDetailSubTab = 'checklist';
+    });
+    try {
+      final list = await ConversationService().getDocumentCheckpoints(doc.documentId);
+      list.sort((a, b) {
+        final regExp = RegExp(r'\d+');
+        final matchA = regExp.firstMatch(a.checkpointId);
+        final matchB = regExp.firstMatch(b.checkpointId);
+        if (matchA != null && matchB != null) {
+          final intA = int.parse(matchA.group(0)!);
+          final intB = int.parse(matchB.group(0)!);
+          return intA.compareTo(intB);
+        }
+        return a.checkpointId.compareTo(b.checkpointId);
+      });
+
+      if (mounted) {
+        setState(() {
+          _documentCheckpoints = list;
+          if (list.isNotEmpty) {
+            final firstCat = list.first.checkpoint?.category;
+            if (firstCat != null) {
+              _expandedDocCategories[firstCat] = true;
+            }
+          }
+          _loadingDocCheckpoints = false;
+        });
+      }
+      _fetchAuditLogs(doc.documentId);
+    } catch (e) {
+      debugPrint('Error fetching document checkpoints: $e');
+      if (mounted) {
+        setState(() {
+          _loadingDocCheckpoints = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _fetchAuditLogs(String documentId) async {
+    setState(() {
+      _loadingAuditLogs = true;
+      _documentAuditLogs = [];
+    });
+    try {
+      final logs = await ConversationService().getDocumentAuditLogs(documentId);
+      if (mounted) {
+        setState(() {
+          _documentAuditLogs = logs;
+          _loadingAuditLogs = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching audit logs: $e');
+      if (mounted) {
+        setState(() {
+          _loadingAuditLogs = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _toggleDocumentMajorCheckpoint(ProspectCheckpoint cp) async {
+    if (_selectedDocumentForAnalysis == null) return;
+    final docId = _selectedDocumentForAnalysis!.documentId;
+    final nextChecked = !cp.checked;
+
+    setState(() {
+      final index = _documentCheckpoints.indexWhere((c) => c.checkpointId == cp.checkpointId);
+      if (index != -1) {
+        final current = _documentCheckpoints[index];
+        final updatedMinis = {...current.miniCheckpointAnswers};
+        if (current.checkpoint?.miniCheckpoints.isNotEmpty ?? false) {
+          for (final mini in current.checkpoint!.miniCheckpoints) {
+            updatedMinis[mini] = nextChecked ? 'yes' : 'no';
+          }
+        }
+        _documentCheckpoints[index] = current.copyWith(
+          checked: nextChecked,
+          miniCheckpointAnswers: updatedMinis,
+        );
+      }
+    });
+
+    try {
+      final updated = await ConversationService().updateDocumentCheckpoint(
+        docId,
+        cp.checkpointId,
+        checked: nextChecked,
+      );
+      if (mounted) {
+        setState(() {
+          final index = _documentCheckpoints.indexWhere((c) => c.checkpointId == cp.checkpointId);
+          if (index != -1) {
+            _documentCheckpoints[index] = updated;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error toggling document checkpoint: $e');
+      _selectDocumentForAnalysis(_selectedDocumentForAnalysis!);
+    }
+  }
+
+  Future<void> _updateDocumentMiniCheckpointAnswer(
+    ProspectCheckpoint cp,
+    String miniKey,
+    String value,
+  ) async {
+    if (_selectedDocumentForAnalysis == null) return;
+    final docId = _selectedDocumentForAnalysis!.documentId;
+
+    final index = _documentCheckpoints.indexWhere((c) => c.checkpointId == cp.checkpointId);
+    if (index == -1) return;
+    final current = _documentCheckpoints[index];
+    final updatedMinis = {...current.miniCheckpointAnswers};
+    updatedMinis[miniKey] = value;
+
+    bool allVerified = true;
+    if (current.checkpoint?.miniCheckpoints.isNotEmpty ?? false) {
+      allVerified = current.checkpoint!.miniCheckpoints.every((m) =>
+          updatedMinis[m] == 'yes' || updatedMinis[m] == 'no' || updatedMinis[m] == 'na');
+    }
+
+    setState(() {
+      _documentCheckpoints[index] = current.copyWith(
+        checked: allVerified,
+        miniCheckpointAnswers: updatedMinis,
+      );
+    });
+
+    try {
+      final updated = await ConversationService().updateDocumentCheckpoint(
+        docId,
+        cp.checkpointId,
+        miniAnswers: {miniKey: value},
+      );
+      if (mounted) {
+        setState(() {
+          final idx = _documentCheckpoints.indexWhere((c) => c.checkpointId == cp.checkpointId);
+          if (idx != -1) {
+            _documentCheckpoints[idx] = updated;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error updating mini-checkpoint answer: $e');
+      _selectDocumentForAnalysis(_selectedDocumentForAnalysis!);
+    }
+  }
+
+  void _showMockDownloadNotification(String item) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.download_done, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Started downloading ' + item + '...',
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: BankerColors.navy2,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  String _formatDateTime(DateTime dt) {
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final month = months[dt.month - 1];
+    final day = dt.day.toString().padLeft(2, '0');
+    final hour = dt.hour.toString().padLeft(2, '0');
+    final minute = dt.minute.toString().padLeft(2, '0');
+    return month + ' ' + day + ', ' + dt.year.toString() + ' ' + hour + ':' + minute;
+  }
+
+  Widget _buildDocumentsTab(CrmProspect prospect) {
+    if (_selectedDocumentForAnalysis != null) {
+      return _buildDocumentAnalysisDetail(prospect, _selectedDocumentForAnalysis!);
+    }
+
+    if (_loadingDocuments) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24.0),
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(BankerColors.blue),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_documents.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: BankerColors.cream,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: BankerColors.line2),
+            ),
+            child: const Center(
+              child: Text(
+                'No documents available for analysis.',
+                style: TextStyle(fontSize: 12, color: BankerColors.muted),
+              ),
+            ),
+          )
+        else
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: BankerColors.line2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.02),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Table(
+              columnWidths: const {
+                0: FlexColumnWidth(3.5),
+                1: FlexColumnWidth(1.2),
+                2: FlexColumnWidth(1.5),
+                3: FlexColumnWidth(2),
+              },
+              defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+              children: [
+                TableRow(
+                  decoration: const BoxDecoration(
+                    color: BankerColors.cream,
+                    border: Border(bottom: BorderSide(color: BankerColors.line2)),
+                  ),
+                  children: [
+                    _buildTableHeaderCell('Document Name'),
+                    _buildTableHeaderCell('Version'),
+                    _buildTableHeaderCell('Status'),
+                    _buildTableHeaderCell('Actions'),
+                  ],
+                ),
+                ..._documents.map((doc) {
+                  return TableRow(
+                    decoration: const BoxDecoration(
+                      border: Border(bottom: BorderSide(color: BankerColors.line, width: 0.5)),
+                    ),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: BankerColors.blueSoft,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Icon(
+                                Icons.insert_drive_file_outlined,
+                                size: 14,
+                                color: BankerColors.blue,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                doc.fileName,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: BankerColors.navy,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        child: Text(
+                          doc.version,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: BankerColors.muted,
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        child: _buildDocumentStatusBadge(doc.status),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton(
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              backgroundColor: BankerColors.blueSoft,
+                              foregroundColor: BankerColors.blue,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(6),
+                                side: const BorderSide(color: BankerColors.blue, width: 0.5),
+                              ),
+                            ),
+                            onPressed: () => _selectDocumentForAnalysis(doc),
+                            child: const Text(
+                              'Click to Analyze',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildTableHeaderCell(String label) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+          color: BankerColors.muted,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDocumentStatusBadge(String status) {
+    Color bg;
+    Color fg;
+    String label = status;
+
+    if (status == 'Approved') {
+      bg = BankerColors.greenSoft;
+      fg = BankerColors.green;
+      label = 'Approved';
+    } else if (status == 'Reject') {
+      bg = BankerColors.redSoft;
+      fg = const Color(0xFF991B1B);
+      label = 'Rejected';
+    } else {
+      bg = BankerColors.amberSoft;
+      fg = const Color(0xFF7C5410);
+      label = 'Pending';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+          color: fg,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDocumentAnalysisDetail(CrmProspect prospect, ProspectDocument doc) {
+    final activeBanker = ref.watch(activeBankerProvider);
+    final bankerName = activeBanker?.name ?? activeBanker?.email ?? 'Content SME';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            InkWell(
+              onTap: () {
+                setState(() {
+                  _selectedDocumentForAnalysis = null;
+                });
+              },
+              borderRadius: BorderRadius.circular(4),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.arrow_back, size: 16, color: BankerColors.navy),
+                    SizedBox(width: 4),
+                    Text(
+                      'Back to Documents List',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: BankerColors.navy,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Container(width: 1, height: 16, color: BankerColors.line2),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                '${doc.fileName} (${doc.version})',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: BankerColors.navy,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 12),
+            _buildDocumentStatusBadge(doc.status),
+            const SizedBox(width: 16),
+            Container(width: 1, height: 16, color: BankerColors.line2),
+            const SizedBox(width: 16),
+            Text(
+              'SME: $bankerName',
+              style: const TextStyle(fontSize: 10, color: BankerColors.muted, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Uploaded: ${_formatDateTime(doc.uploadedAt)}',
+              style: const TextStyle(fontSize: 10, color: BankerColors.muted, fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        Container(
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: BankerColors.line2)),
+          ),
+          child: Row(
+            children: [
+              _buildDocumentSubTabButton('Quality Checklist', 'checklist'),
+              _buildDocumentSubTabButton('Show comparative view', 'comparison'),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        if (_docDetailSubTab == 'checklist')
+          _buildDocumentCheckpointsSection(doc)
+        else
+          _buildDocumentComparisonSection(doc),
+
+        const SizedBox(height: 24),
+
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: BankerColors.line)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: BankerColors.navy,
+                  side: const BorderSide(color: BankerColors.navy),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                ),
+                onPressed: () {
+                  setState(() {
+                    _selectedDocumentForAnalysis = null;
+                  });
+                },
+                child: const Text('Back to list', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF991B1B),
+                  side: const BorderSide(color: Color(0xFFFCA5A5)),
+                  backgroundColor: BankerColors.redSoft,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                ),
+                onPressed: () => _updateStatusAndGoBack(doc.documentId, 'Reject', bankerName),
+                child: const Text('Reject and wait for internal review', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: BankerColors.navy,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                ),
+                onPressed: () => _updateStatusAndGoBack(doc.documentId, 'Approved', bankerName),
+                child: const Text('Proceed', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDocumentSubTabButton(String label, String tabKey) {
+    final isActive = _docDetailSubTab == tabKey;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _docDetailSubTab = tabKey;
+        });
+      },
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: isActive ? BankerColors.gold : Colors.transparent,
+                width: 2,
+              ),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: isActive ? BankerColors.navy : BankerColors.muted,
+              fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _updateStatusAndGoBack(String documentId, String status, String actor) async {
+    try {
+      await ConversationService().updateDocumentStatus(documentId, status, actor);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            status == 'Approved' 
+                ? 'Document status updated to Approved.' 
+                : 'Document version rejected and logged in audit log.',
+          ),
+          backgroundColor: status == 'Approved' ? BankerColors.green : const Color(0xFF991B1B),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      await _fetchDocuments();
+      
+      if (mounted) {
+        setState(() {
+          _selectedDocumentForAnalysis = null;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error updating document status: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update document status: ' + e.toString()),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Widget _buildDocumentCheckpointsSection(ProspectDocument doc) {
+    if (_loadingDocCheckpoints) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 32),
+        child: Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(BankerColors.blue),
+          ),
+        ),
+      );
+    }
+
+    if (_documentCheckpoints.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: BankerColors.cream,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: BankerColors.line2),
+        ),
+        child: const Center(
+          child: Text(
+            'No quality checkpoints defined for this document.',
+            style: TextStyle(fontSize: 11, color: BankerColors.muted),
+          ),
+        ),
+      );
+    }
+
+    final confidenceScorePercent = (doc.confidenceScore * 100).toInt();
+    final totalMajor = _documentCheckpoints.length;
+    final verifiedMajor = _documentCheckpoints.where((c) => c.checked).length;
+
+    final Map<String, List<ProspectCheckpoint>> grouped = {};
+    for (final cp in _documentCheckpoints) {
+      final cat = cp.checkpoint?.category ?? 'Other Checkpoints';
+      grouped.putIfAbsent(cat, () => []).add(cp);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: BankerColors.blueSoft,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: BankerColors.blue.withOpacity(0.15)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.analytics_outlined, size: 16, color: BankerColors.blue),
+                  const SizedBox(width: 8),
+                  Text(
+                    'AI Analysis Confidence: ' + confidenceScorePercent.toString() + '%',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: BankerColors.blue,
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                verifiedMajor.toString() + ' of ' + totalMajor.toString() + ' major checkpoints verified',
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: BankerColors.navy,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        ...grouped.entries.map((entry) {
+          final category = entry.key;
+          final cps = entry.value;
+          final isExpanded = _expandedDocCategories[category] ?? false;
+
+          final checkedCount = cps.where((c) => c.checked).length;
+          final totalCount = cps.length;
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: BankerColors.cream,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: BankerColors.line2),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _expandedDocCategories[category] = !isExpanded;
+                    });
+                  },
+                  borderRadius: isExpanded
+                      ? const BorderRadius.vertical(top: Radius.circular(10))
+                      : BorderRadius.circular(10),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                category.toUpperCase(),
+                                style: const TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: BankerColors.navy,
+                                  letterSpacing: 0.8,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                checkedCount.toString() + ' of ' + totalCount.toString() + ' checkpoints verified',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: checkedCount == totalCount
+                                      ? const Color(0xFF0F6E56)
+                                      : BankerColors.muted2,
+                                  fontWeight: checkedCount == totalCount
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          isExpanded ? Icons.expand_less : Icons.expand_more,
+                          size: 16,
+                          color: BankerColors.muted,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (isExpanded) ...[
+                  const Divider(height: 1, color: BankerColors.line2),
+                  Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Table(
+                          columnWidths: const {
+                            0: FixedColumnWidth(46),
+                            1: FlexColumnWidth(4),
+                            2: FixedColumnWidth(150),
+                          },
+                          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                          children: [
+                            const TableRow(
+                              children: [
+                                Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 4),
+                                  child: Center(
+                                    child: Text(
+                                      'VERIFIED',
+                                      style: TextStyle(
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.bold,
+                                        color: BankerColors.muted,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                                  child: Text(
+                                    'CHECKPOINT REQUIREMENT',
+                                    style: TextStyle(
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.bold,
+                                      color: BankerColors.muted,
+                                    ),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                                  child: Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Text(
+                                      'VERIFICATION STATUS',
+                                      style: TextStyle(
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.bold,
+                                        color: BankerColors.muted,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        ...cps.map((cp) {
+                          final title = cp.checkpoint?.title ?? cp.checkpointId;
+                          final description = cp.checkpoint?.description;
+                          final hasMinis = cp.checkpoint?.miniCheckpoints.isNotEmpty ?? false;
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: BankerColors.line2, width: 0.5),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: Table(
+                              columnWidths: const {
+                                0: FixedColumnWidth(46),
+                                1: FlexColumnWidth(4),
+                                2: FixedColumnWidth(150),
+                              },
+                              defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                              children: [
+                                TableRow(
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    border: hasMinis
+                                        ? const Border(bottom: BorderSide(color: BankerColors.line, width: 0.5))
+                                        : null,
+                                  ),
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 8),
+                                      child: Center(
+                                        child: GestureDetector(
+                                          onTap: () => _toggleDocumentMajorCheckpoint(cp),
+                                          child: MouseRegion(
+                                            cursor: SystemMouseCursors.click,
+                                            child: Container(
+                                              width: 15,
+                                              height: 15,
+                                              decoration: BoxDecoration(
+                                                color: cp.checked ? BankerColors.blue : Colors.transparent,
+                                                borderRadius: BorderRadius.circular(4),
+                                                border: Border.all(
+                                                  color: cp.checked ? BankerColors.blue : BankerColors.muted2,
+                                                  width: 1.5,
+                                                ),
+                                              ),
+                                              alignment: Alignment.center,
+                                              child: cp.checked
+                                                  ? const Icon(Icons.check, size: 10, color: Colors.white)
+                                                  : null,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            title,
+                                            style: const TextStyle(
+                                              fontSize: 10.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: BankerColors.ink,
+                                            ),
+                                          ),
+                                          if (description != null && description.isNotEmpty) ...[
+                                            const SizedBox(height: 1),
+                                            Text(
+                                              description,
+                                              style: const TextStyle(
+                                                fontSize: 9.5,
+                                                color: BankerColors.muted,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                                      child: Align(
+                                        alignment: Alignment.centerRight,
+                                        child: cp.checked
+                                            ? const Icon(Icons.check_circle_outline, size: 14, color: BankerColors.green)
+                                            : const SizedBox.shrink(),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (hasMinis) ...[
+                                  ...cp.checkpoint!.miniCheckpoints.asMap().entries.map((miniEntry) {
+                                    final miniIdx = miniEntry.key;
+                                    final mini = miniEntry.value;
+                                    final isLastMini = miniIdx == cp.checkpoint!.miniCheckpoints.length - 1;
+                                    final answer = cp.miniCheckpointAnswers[mini] ?? 'no';
+
+                                    return TableRow(
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        border: isLastMini
+                                            ? null
+                                            : const Border(bottom: BorderSide(color: BankerColors.line, width: 0.5)),
+                                      ),
+                                      children: [
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 8),
+                                          child: Center(
+                                            child: Container(
+                                              width: 6,
+                                              height: 6,
+                                              decoration: BoxDecoration(
+                                                color: BankerColors.muted2.withOpacity(0.55),
+                                                shape: BoxShape.circle,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                                          child: Text(
+                                            mini,
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                              color: BankerColors.ink,
+                                            ),
+                                          ),
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                                          child: Align(
+                                            alignment: Alignment.centerRight,
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                _buildDocumentTriStateButton(
+                                                  label: 'N/A',
+                                                  isSelected: answer == 'na',
+                                                  selectedBg: Colors.blueGrey.shade100,
+                                                  selectedFg: Colors.blueGrey.shade800,
+                                                  onTap: () => _updateDocumentMiniCheckpointAnswer(cp, mini, 'na'),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                _buildDocumentTriStateButton(
+                                                  label: 'Yes',
+                                                  isSelected: answer == 'yes',
+                                                  selectedBg: BankerColors.greenSoft,
+                                                  selectedFg: const Color(0xFF0F6E56),
+                                                  onTap: () => _updateDocumentMiniCheckpointAnswer(cp, mini, 'yes'),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                _buildDocumentTriStateButton(
+                                                  label: 'No',
+                                                  isSelected: answer == 'no',
+                                                  selectedBg: BankerColors.redSoft,
+                                                  selectedFg: const Color(0xFF991B1B),
+                                                  onTap: () => _updateDocumentMiniCheckpointAnswer(cp, mini, 'no'),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  }),
+                                ],
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          );
+        }).toList(),
+      ],
+    );
+  }
+
+  Widget _buildDocumentComparisonSection(ProspectDocument doc) {
+    final hasPrev = doc.previousVersionDocumentId != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: BankerColors.cream,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: BankerColors.line2),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.compare_arrows_rounded, size: 16, color: BankerColors.navy),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  hasPrev
+                      ? 'Displaying version differences between the current version (' + doc.version + ') and the previous version.'
+                      : 'This is the initial version of this document. No previous version was found for comparison.',
+                  style: const TextStyle(fontSize: 11, color: BankerColors.navy, fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        if (hasPrev) ...[
+          const Text(
+            'AI-GENERATED COMPARISON SUMMARY',
+            style: TextStyle(
+              fontSize: 10,
+              letterSpacing: 1.2,
+              color: BankerColors.navy,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(16),
+            height: 350,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: BankerColors.line2),
+            ),
+            child: SingleChildScrollView(
+              child: SelectableText(
+                doc.comparisonReport ?? 'No comparison report generated.',
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  fontFamily: 'Courier',
+                  color: BankerColors.ink,
+                  height: 1.5,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+
+        const Text(
+          'AVAILABLE DOWNLOAD ACTIONS',
+          style: TextStyle(
+            fontSize: 10,
+            letterSpacing: 1.2,
+            color: BankerColors.navy,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          children: [
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: BankerColors.blueSoft,
+                foregroundColor: BankerColors.blue,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+              ),
+              onPressed: () => _showMockDownloadNotification(doc.fileName),
+              icon: const Icon(Icons.download, size: 14),
+              label: const Text('Download Current Version', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+            ),
+            if (hasPrev) ...[
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: BankerColors.blueSoft,
+                  foregroundColor: BankerColors.blue,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                ),
+                onPressed: () => _showMockDownloadNotification('Previous Version'),
+                icon: const Icon(Icons.download, size: 14),
+                label: const Text('Download Previous Version', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: BankerColors.goldLight.withOpacity(0.2),
+                  foregroundColor: BankerColors.gold,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                ),
+                onPressed: () => _showMockDownloadNotification('AI Comparison Report'),
+                icon: const Icon(Icons.assignment, size: 14),
+                label: const Text('Download Comparison Report', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDocumentTriStateButton({
+    required String label,
+    required bool isSelected,
+    required Color selectedBg,
+    required Color selectedFg,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          decoration: BoxDecoration(
+            color: isSelected ? selectedBg : Colors.transparent,
+            border: Border.all(
+              color: isSelected ? selectedFg.withOpacity(0.5) : BankerColors.line2,
+              width: isSelected ? 1 : 0.5,
+            ),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 8.5,
+              fontWeight: FontWeight.bold,
+              color: isSelected ? selectedFg : BankerColors.muted,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
 
   Widget _buildValidationCheckpointsSection() {
     if (_loadingCheckpoints) {
@@ -1917,9 +3109,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
         ),
         const SizedBox(height: 18),
 
-        // Checkpoints Section
-        _buildValidationCheckpointsSection(),
-        const SizedBox(height: 18),
+
 
         // 2. Documents Requested Section
         Row(
@@ -4153,6 +5343,7 @@ class _BankerDetailPageState extends ConsumerState<BankerDetailPage> {
                             height: 600,
                             child: AiGuidePanel(
                               prospectId: widget.prospectId,
+                              bankerId: activeBanker?.bankerId,
                               founderName: prospect.name,
                               companyName: prospect.name,
                               industry: prospect.sector,
@@ -4194,6 +5385,7 @@ class _BankerDetailPageState extends ConsumerState<BankerDetailPage> {
                           width: 420,
                           child: AiGuidePanel(
                             prospectId: widget.prospectId,
+                            bankerId: activeBanker?.bankerId,
                             founderName: prospect.name,
                             companyName: prospect.name,
                             industry: prospect.sector,

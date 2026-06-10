@@ -1530,6 +1530,7 @@ class _HubMainColumnState extends State<_HubMainColumn> {
 
 class _AiGuidePanel extends StatefulWidget {
   final String? prospectId;
+  final String? bankerId;
   final String founderName;
   final String companyName;
   final String industry;
@@ -1545,6 +1546,7 @@ class _AiGuidePanel extends StatefulWidget {
 
   const _AiGuidePanel({
     this.prospectId,
+    this.bankerId,
     required this.founderName,
     required this.companyName,
     required this.industry,
@@ -1849,6 +1851,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
           'industry': widget.industry,
           'stage_label': widget.stageLabel,
           'priorities': widget.priorities,
+          if (widget.bankerId != null) 'banker_id': widget.bankerId,
         },
         isBanker: widget.customActionLabel == 'Prospect Chats',
       );
@@ -2015,7 +2018,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
   Widget _buildHeader() {
     final isBankerChats = widget.customActionLabel == 'Prospect Chats';
 
-    if (widget.inDirectMessagingMode) {
+    if (widget.inDirectMessagingMode && !_viewingHistory) {
       return Container(
         padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
         decoration: const BoxDecoration(
@@ -2044,6 +2047,44 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
               ),
             ),
             const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () {
+                _openHistory();
+              },
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppThemeTokens.buttonPrimary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: AppThemeTokens.buttonPrimary.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.history_rounded,
+                        size: 13,
+                        color: AppThemeTokens.buttonPrimary,
+                      ),
+                      SizedBox(width: 5),
+                      Text(
+                        'Chat History',
+                        style: TextStyle(
+                          color: AppThemeTokens.buttonPrimary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
             GestureDetector(
               onTap: () {
                 widget.onBackToNova?.call();
@@ -2085,7 +2126,6 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
         ),
       );
     }
-
 
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
@@ -6209,6 +6249,7 @@ class _PrepCallModal extends StatelessWidget {
 
 class AiGuidePanel extends StatelessWidget {
   final String? prospectId;
+  final String? bankerId;
   final String founderName;
   final String companyName;
   final String industry;
@@ -6225,6 +6266,7 @@ class AiGuidePanel extends StatelessWidget {
   const AiGuidePanel({
     super.key,
     this.prospectId,
+    this.bankerId,
     required this.founderName,
     required this.companyName,
     required this.industry,
@@ -6243,6 +6285,7 @@ class AiGuidePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return _AiGuidePanel(
       prospectId: prospectId,
+      bankerId: bankerId,
       founderName: founderName,
       companyName: companyName,
       industry: industry,
