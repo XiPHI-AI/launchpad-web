@@ -4147,6 +4147,11 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
   // Text controller for search
   final TextEditingController _searchController = TextEditingController();
 
+  // Floating chatbot state
+  bool _showFloatingChatbot = false;
+  String? _floatingChatbotProspectId;
+  bool _floatingChatbotLockDropdown = false;
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -4312,27 +4317,158 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
           },
         ),
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      body: Stack(
         children: [
-          // 1. SUMMARY BAR
-          _buildSummaryBar(
-            isMobile: isMobile,
-            activeCount: activeCount,
-            needsActionCount: needsActionCount,
-            callsCount: callsCount,
-            awaitingDocsCount: awaitingDocsCount,
-            onboardedCount: onboardedCount,
+          // Main content
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // 1. SUMMARY BAR
+              _buildSummaryBar(
+                isMobile: isMobile,
+                activeCount: activeCount,
+                needsActionCount: needsActionCount,
+                callsCount: callsCount,
+                awaitingDocsCount: awaitingDocsCount,
+                onboardedCount: onboardedCount,
+              ),
+
+              // 2. TOOLBAR
+              _buildToolbar(isMobile),
+
+              // 3. FULL-WIDTH TABLE REGION
+              Expanded(
+                child: Container(
+                  color: Colors.white,
+                  child: _buildCrmTable(prospects),
+                ),
+              ),
+            ],
           ),
 
-          // 2. TOOLBAR
-          _buildToolbar(isMobile),
+          // Click-outside tap barrier
+          if (_showFloatingChatbot)
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: () {
+                  setState(() {
+                    _showFloatingChatbot = false;
+                  });
+                },
+                child: Container(color: Colors.transparent),
+              ),
+            ),
 
-          // 3. FULL-WIDTH TABLE REGION
-          Expanded(
-            child: Container(
-              color: Colors.white,
-              child: _buildCrmTable(prospects),
+          // Floating chatbot overlay
+          if (_showFloatingChatbot) ...[
+            Builder(
+              builder: (context) {
+                final resolvedProspectId = _floatingChatbotProspectId ?? (prospects.isNotEmpty ? prospects.first.id : null);
+                final selectedProspect = prospects.isNotEmpty
+                    ? prospects.firstWhere(
+                        (p) => p.id == resolvedProspectId,
+                        orElse: () => prospects.first,
+                      )
+                    : null;
+
+                if (selectedProspect == null) {
+                  return const SizedBox.shrink();
+                }
+
+                return Positioned(
+                  bottom: 90,
+                  right: 24,
+                  child: Container(
+                    width: 420,
+                    height: 600,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFE7DCC8), width: 1.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.15),
+                          blurRadius: 16,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14.5), // Match inner boundary of 1.5px border
+                      child: AiGuidePanel(
+                        prospectId: selectedProspect.id,
+                        bankerId: activeBanker?.bankerId,
+                        founderName: selectedProspect.name,
+                        companyName: selectedProspect.name,
+                        industry: selectedProspect.sector,
+                        stageLabel: selectedProspect.stage,
+                        priorities: const [],
+                        customActionLabel: 'Prospect Chats',
+                        onCustomActionTap: () {},
+                        bankerName: bankerName,
+                        inDirectMessagingMode: true,
+                        lockDropdown: _floatingChatbotLockDropdown,
+                        showLeftBorder: false, // Hide straight left line inside overlay card
+                        prospectsList: prospects,
+                        onProspectSelected: (p) {
+                          setState(() {
+                            _floatingChatbotProspectId = p.id;
+                          });
+                        },
+                        onClose: () {
+                          setState(() {
+                            _showFloatingChatbot = false;
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+                );
+              }
+            ),
+          ],
+
+          // Floating message button (FAB) - Always visible, changes icon based on state
+          Positioned(
+            bottom: 24,
+            right: 24,
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  if (_showFloatingChatbot) {
+                    _showFloatingChatbot = false;
+                  } else {
+                    _showFloatingChatbot = true;
+                    // Default to first prospect's ID, or null
+                    _floatingChatbotProspectId = prospects.isNotEmpty ? prospects.first.id : null;
+                    _floatingChatbotLockDropdown = false; // Allow switching when opened via FAB
+                  }
+                });
+              },
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: BankerColors.navy,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.25),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    _showFloatingChatbot ? Icons.close_rounded : Icons.message_rounded,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+              ),
             ),
           ),
         ],
@@ -4775,42 +4911,27 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8),
                                   alignment: Alignment.center,
-                                  child: isHovered
-                                      ? Row(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            GestureDetector(
-                                              onTap: () {
-                                                // Quick action to individual Banker detail page
-                                                context.go('/banker/${prospect.id}');
-                                              },
-                                              child: Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                                                decoration: BoxDecoration(color: BankerColors.navy, borderRadius: BorderRadius.circular(6)),
-                                                child: const Text('Assign', style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 4),
-                                            GestureDetector(
-                                              onTap: () {
-                                                context.go('/banker/${prospect.id}');
-                                              },
-                                              child: Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.white,
-                                                  border: Border.all(color: BankerColors.line2),
-                                                  borderRadius: BorderRadius.circular(6),
-                                                ),
-                                                child: Text(
-                                                  prospect.status.contains('Waiting') ? 'Nudge' : 'Message',
-                                                  style: const TextStyle(fontSize: 10, color: BankerColors.ink),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        )
-                                      : const SizedBox.shrink(),
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _showFloatingChatbot = true;
+                                        _floatingChatbotProspectId = prospect.id;
+                                        _floatingChatbotLockDropdown = true;
+                                      });
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        border: Border.all(color: BankerColors.line2),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        prospect.status.contains('Waiting') ? 'Nudge' : 'Message',
+                                        style: const TextStyle(fontSize: 10, color: BankerColors.ink, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ),
                             ],

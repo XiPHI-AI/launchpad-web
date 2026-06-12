@@ -15,6 +15,7 @@ import '../../shared/widgets/no_transition_page_route.dart';
 import '../../shared/widgets/prospect_id_provider.dart';
 import '../../services/prospect_storage.dart';
 import '../../shared/widgets/typewriter_reveal.dart';
+import '../banker/banker_crm_page.dart';
 
 class _GuideMessage {
   final bool isUser;
@@ -1543,6 +1544,10 @@ class _AiGuidePanel extends StatefulWidget {
   final FocusNode? focusNode;
   final bool inDirectMessagingMode;
   final VoidCallback? onBackToNova;
+  final List<CrmProspect>? prospectsList;
+  final ValueChanged<CrmProspect>? onProspectSelected;
+  final bool lockDropdown;
+  final bool showLeftBorder;
 
   const _AiGuidePanel({
     this.prospectId,
@@ -1559,6 +1564,10 @@ class _AiGuidePanel extends StatefulWidget {
     this.focusNode,
     this.inDirectMessagingMode = false,
     this.onBackToNova,
+    this.prospectsList,
+    this.onProspectSelected,
+    this.lockDropdown = false,
+    this.showLeftBorder = true,
   });
 
   @override
@@ -1596,6 +1605,21 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
   // Direct Messaging State
   List<DirectMessage> _directMessages = [];
   bool _loadingDirectMessages = false;
+  bool? _localDmMode;
+  bool get _inDirectMessagingMode => _localDmMode ?? widget.inDirectMessagingMode;
+
+  void _setDmMode(bool value) {
+    if (_localDmMode == value) return;
+    setState(() {
+      _localDmMode = value;
+      if (value) {
+        _viewingHistory = false;
+        _loadDirectMessages();
+      } else {
+        widget.onBackToNova?.call();
+      }
+    });
+  }
 
   bool _isDmUser(String sender) {
     final isBankerView = widget.customActionLabel == 'Prospect Chats';
@@ -1644,9 +1668,10 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
   @override
   void initState() {
     super.initState();
+    _localDmMode = widget.inDirectMessagingMode;
     _resetWelcomeMessage();
     _loadBankerHistory();
-    if (widget.inDirectMessagingMode) {
+    if (_inDirectMessagingMode) {
       _loadDirectMessages();
     }
   }
@@ -1674,7 +1699,12 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
         _resetWelcomeMessage();
       });
     }
-    final isDmMode = widget.inDirectMessagingMode;
+    if (oldWidget.inDirectMessagingMode != widget.inDirectMessagingMode) {
+      setState(() {
+        _localDmMode = widget.inDirectMessagingMode;
+      });
+    }
+    final isDmMode = _inDirectMessagingMode;
     final wasDmMode = oldWidget.inDirectMessagingMode;
     if (isDmMode && (!wasDmMode || oldWidget.prospectId != widget.prospectId)) {
       _loadDirectMessages();
@@ -1797,7 +1827,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
     final trimmed = message.trim();
     if (trimmed.isEmpty || _sending) return;
 
-    final isDmMode = widget.inDirectMessagingMode;
+    final isDmMode = _inDirectMessagingMode;
 
     if (isDmMode) {
       final sender = widget.customActionLabel == 'Prospect Chats' ? 'banker' : 'prospect';
@@ -1994,9 +2024,11 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: Colors.white,
-        border: Border(left: BorderSide(color: Color(0xFFE7DCC8))),
+        border: widget.showLeftBorder
+            ? const Border(left: BorderSide(color: Color(0xFFE7DCC8)))
+            : null,
       ),
       child: Column(
         children: [
@@ -2018,192 +2050,220 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
   Widget _buildHeader() {
     final isBankerChats = widget.customActionLabel == 'Prospect Chats';
 
-    if (widget.inDirectMessagingMode && !_viewingHistory) {
-      return Container(
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: Color(0xFFE7DCC8))),
+    // 1. Determine Icon based on current view/mode
+    final IconData iconData;
+    final Color iconColor;
+    if (_viewingHistory) {
+      iconData = Icons.history_rounded;
+      iconColor = const Color(0xFF6B7280);
+    } else if (_inDirectMessagingMode) {
+      iconData = Icons.chat_bubble_outline_rounded;
+      iconColor = AppThemeTokens.buttonPrimary;
+    } else {
+      iconData = Icons.auto_awesome_rounded;
+      iconColor = AppThemeTokens.buttonPrimary;
+    }
+
+    // 2. Build Name / Dropdown Widget (Only prospect name, ending with dropdown icon next to it)
+    Widget nameWidget;
+    if (widget.prospectsList != null && widget.prospectsList!.isNotEmpty) {
+      nameWidget = DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: widget.prospectId,
+          isExpanded: false,
+          icon: widget.lockDropdown
+              ? const SizedBox.shrink()
+              : const Icon(Icons.arrow_drop_down, color: AppThemeTokens.buttonPrimary),
+          style: const TextStyle(
+            color: AppThemeTokens.modalHeader,
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
+            fontFamily: 'Inter',
+          ),
+          onChanged: widget.lockDropdown
+              ? null
+              : (String? newProspectId) {
+                  if (newProspectId != null && widget.onProspectSelected != null) {
+                    final selected = widget.prospectsList!.firstWhere((p) => p.id == newProspectId);
+                    widget.onProspectSelected!(selected);
+                  }
+                },
+          items: widget.prospectsList!.map<DropdownMenuItem<String>>((CrmProspect p) {
+            return DropdownMenuItem<String>(
+              value: p.id,
+              child: Text(p.name),
+            );
+          }).toList(),
         ),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.chat_bubble_outline_rounded,
-              color: AppThemeTokens.buttonPrimary,
-              size: 18,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                isBankerChats
-                    ? "Chat with ${widget.companyName}"
-                    : "Chat with ${widget.bankerName ?? 'your Banker'}",
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppThemeTokens.modalHeader,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            GestureDetector(
-              onTap: () {
-                _openHistory();
-              },
-              child: MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppThemeTokens.buttonPrimary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(
-                      color: AppThemeTokens.buttonPrimary.withValues(alpha: 0.35),
-                    ),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.history_rounded,
-                        size: 13,
-                        color: AppThemeTokens.buttonPrimary,
-                      ),
-                      SizedBox(width: 5),
-                      Text(
-                        'Chat History',
-                        style: TextStyle(
-                          color: AppThemeTokens.buttonPrimary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 6),
-            GestureDetector(
-              onTap: () {
-                widget.onBackToNova?.call();
-              },
-              child: MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppThemeTokens.buttonPrimary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(
-                      color: AppThemeTokens.buttonPrimary.withValues(alpha: 0.35),
-                    ),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.arrow_back_rounded,
-                        size: 13,
-                        color: AppThemeTokens.buttonPrimary,
-                      ),
-                      SizedBox(width: 5),
-                      Text(
-                        'Back to Nova',
-                        style: TextStyle(
-                          color: AppThemeTokens.buttonPrimary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
+      );
+    } else {
+      final String displayName;
+      if (isBankerChats) {
+        displayName = widget.companyName;
+      } else {
+        displayName = widget.bankerName ?? 'your Banker';
+      }
+      nameWidget = Text(
+        displayName,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          color: AppThemeTokens.modalHeader,
+          fontWeight: FontWeight.w700,
+          fontSize: 14,
+          fontFamily: 'Inter',
         ),
       );
     }
+
+    // 3. Row 1: Icon + NameWidget + Spacer + Segment Switch
+    final row1 = Row(
+      children: [
+        Icon(
+          iconData,
+          color: iconColor,
+          size: 18,
+        ),
+        const SizedBox(width: 8),
+        nameWidget,
+        const Spacer(),
+        _buildModeSwitch(),
+      ],
+    );
+
+    // 4. Row 2: History Chip (Only visible in NOVA mode, and only if history exists/is loading/viewing)
+    final bool showHistoryChip = !_inDirectMessagingMode &&
+        (_viewingHistory ||
+            _loadingHistory ||
+            _loadingVoiceConversations ||
+            _historyMessages.isNotEmpty ||
+            _voiceTurns.isNotEmpty);
 
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: Color(0xFFE7DCC8))),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            _viewingHistory
-                ? Icons.history_rounded
-                : Icons.auto_awesome_rounded,
-            color: _viewingHistory
-                ? const Color(0xFF6B7280)
-                : AppThemeTokens.buttonPrimary,
-            size: 18,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            _viewingHistory ? 'Chat History' : 'Nova',
-            style: const TextStyle(
-              color: AppThemeTokens.modalHeader,
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
-            ),
-          ),
-          const Spacer(),
-          GestureDetector(
-            onTap: () {
-              if (_viewingHistory) {
-                _closeHistory();
-              } else {
-                _openHistory();
-              }
-            },
-            child: MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppThemeTokens.buttonPrimary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(
-                    color: AppThemeTokens.buttonPrimary.withValues(alpha: 0.35),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      _viewingHistory
-                          ? Icons.arrow_back_rounded
-                          : Icons.history_rounded,
-                      size: 13,
-                      color: AppThemeTokens.buttonPrimary,
-                    ),
-                    const SizedBox(width: 5),
-                    Text(
-                      _viewingHistory
-                          ? 'Back to Nova'
-                          : 'Chat History',
-                      style: const TextStyle(
-                        color: AppThemeTokens.buttonPrimary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
+          row1,
+          if (showHistoryChip) ...[
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                GestureDetector(
+                  onTap: () {
+                    if (_viewingHistory) {
+                      _closeHistory();
+                    } else {
+                      _openHistory();
+                    }
+                  },
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppThemeTokens.buttonPrimary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: AppThemeTokens.buttonPrimary.withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _viewingHistory
+                                ? Icons.arrow_back_rounded
+                                : Icons.history_rounded,
+                            size: 13,
+                            color: AppThemeTokens.buttonPrimary,
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            _viewingHistory
+                                ? 'Back to Nova'
+                                : (isBankerChats ? 'Prospect Chat History' : 'Chat History'),
+                            style: const TextStyle(
+                              color: AppThemeTokens.buttonPrimary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              fontFamily: 'Inter',
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
-          ),
+          ],
         ],
       ),
     );
   }
 
+  Widget _buildModeSwitch() {
+    final isDm = _inDirectMessagingMode;
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F4F6),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildSwitchOption('NOVA', !isDm),
+          _buildSwitchOption('Message', isDm),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSwitchOption(String label, bool isActive) {
+    return GestureDetector(
+      onTap: () {
+        _setDmMode(label == 'Message');
+      },
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: isActive ? const Color(0xFF04213D) : Colors.transparent,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: isActive
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.15),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isActive ? Colors.white : const Color(0xFF6B7280),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              fontFamily: 'Inter',
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildBankerTabSwitcher() {
+    final isBankerChats = widget.customActionLabel == 'Prospect Chats';
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -2214,7 +2274,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
         children: [
           _buildBankerTabButton('Conversational History', 'conversational'),
           const SizedBox(width: 8),
-          _buildBankerTabButton('Chat History', 'chat'),
+          _buildBankerTabButton(isBankerChats ? 'Prospect Chat History' : 'Chat History', 'chat'),
         ],
       ),
     );
@@ -2333,7 +2393,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
   }
 
   Widget _buildChatBody() {
-    final isDmMode = widget.inDirectMessagingMode;
+    final isDmMode = _inDirectMessagingMode;
 
     if (isDmMode && _loadingDirectMessages && _directMessages.isEmpty) {
       return const Center(
@@ -2517,7 +2577,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
                           fontSize: 14,
                         ),
                         decoration: InputDecoration(
-                          hintText: widget.inDirectMessagingMode
+                          hintText: _inDirectMessagingMode
                               ? (widget.customActionLabel == 'Prospect Chats'
                                   ? 'Write a message for ${widget.companyName}…'
                                   : 'Write a message for ${widget.bankerName ?? 'your Banker'}…')
@@ -6262,6 +6322,10 @@ class AiGuidePanel extends StatelessWidget {
   final FocusNode? focusNode;
   final bool inDirectMessagingMode;
   final VoidCallback? onBackToNova;
+  final List<CrmProspect>? prospectsList;
+  final ValueChanged<CrmProspect>? onProspectSelected;
+  final bool lockDropdown;
+  final bool showLeftBorder;
 
   const AiGuidePanel({
     super.key,
@@ -6279,6 +6343,10 @@ class AiGuidePanel extends StatelessWidget {
     this.focusNode,
     this.inDirectMessagingMode = false,
     this.onBackToNova,
+    this.prospectsList,
+    this.onProspectSelected,
+    this.lockDropdown = false,
+    this.showLeftBorder = true,
   });
 
   @override
@@ -6298,6 +6366,10 @@ class AiGuidePanel extends StatelessWidget {
       focusNode: focusNode,
       inDirectMessagingMode: inDirectMessagingMode,
       onBackToNova: onBackToNova,
+      prospectsList: prospectsList,
+      onProspectSelected: onProspectSelected,
+      lockDropdown: lockDropdown,
+      showLeftBorder: showLeftBorder,
     );
   }
 }
