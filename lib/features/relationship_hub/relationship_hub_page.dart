@@ -1748,7 +1748,10 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
   }
 
   Future<void> _loadBankerHistory() async {
-    if (widget.prospectId == null) {
+    final isBanker = widget.customActionLabel == 'Prospect Chats';
+    final chatHistoryId = isBanker ? widget.bankerId : widget.prospectId;
+
+    if (chatHistoryId == null && widget.prospectId == null) {
       setState(() {
         _voiceTurns = [];
         _historyMessages = [];
@@ -1767,6 +1770,12 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
     await _loadHistory();
 
     // Load Voice Conversational History
+    if (widget.prospectId == null) {
+      setState(() {
+        _loadingVoiceConversations = false;
+      });
+      return;
+    }
     try {
       final conversations = await _service.getProspectConversations(widget.prospectId!);
       if (mounted) {
@@ -1941,11 +1950,16 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
     if (_loadingHistory) return;
     if (loadMore && !_historyHasMore) return;
 
+    final isBanker = widget.customActionLabel == 'Prospect Chats';
+    final historyId = isBanker ? (widget.bankerId ?? widget.prospectId) : widget.prospectId;
+
+    if (historyId == null) return;
+
     setState(() => _loadingHistory = true);
 
     try {
       final result = await _service.getChatHistory(
-        widget.prospectId!,
+        historyId,
         limit: 30,
         beforeId: loadMore ? _historyEarliestId : 0,
       );

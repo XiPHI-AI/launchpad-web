@@ -1974,54 +1974,40 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
 
         const SizedBox(height: 24),
 
-        Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          decoration: const BoxDecoration(
-            border: Border(top: BorderSide(color: BankerColors.line)),
+        if (_docDetailSubTab == 'comparison' && doc.status != 'Approved' && doc.status != 'Reject')
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            decoration: const BoxDecoration(
+              border: Border(top: BorderSide(color: BankerColors.line)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF991B1B),
+                    side: const BorderSide(color: Color(0xFFFCA5A5)),
+                    backgroundColor: BankerColors.redSoft,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  ),
+                  onPressed: () => _updateStatusAndGoBack(doc.documentId, 'Reject', bankerName),
+                  child: const Text('Reject and wait for internal review', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: BankerColors.navy,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  ),
+                  onPressed: () => _updateStatusAndGoBack(doc.documentId, 'Approved', bankerName),
+                  child: const Text('Proceed', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: BankerColors.navy,
-                  side: const BorderSide(color: BankerColors.navy),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                ),
-                onPressed: () {
-                  setState(() {
-                    _selectedDocumentForAnalysis = null;
-                  });
-                },
-                child: const Text('Back to list', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-              ),
-              const SizedBox(width: 12),
-              OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF991B1B),
-                  side: const BorderSide(color: Color(0xFFFCA5A5)),
-                  backgroundColor: BankerColors.redSoft,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                ),
-                onPressed: () => _updateStatusAndGoBack(doc.documentId, 'Reject', bankerName),
-                child: const Text('Reject and wait for internal review', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-              ),
-              const SizedBox(width: 12),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: BankerColors.navy,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                ),
-                onPressed: () => _updateStatusAndGoBack(doc.documentId, 'Approved', bankerName),
-                child: const Text('Proceed', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-        ),
       ],
     );
   }
@@ -2334,9 +2320,9 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
                                       padding: const EdgeInsets.symmetric(vertical: 8),
                                       child: Center(
                                         child: GestureDetector(
-                                          onTap: () => _toggleDocumentMajorCheckpoint(cp),
+                                          onTap: doc.status == 'Approved' ? null : () => _toggleDocumentMajorCheckpoint(cp),
                                           child: MouseRegion(
-                                            cursor: SystemMouseCursors.click,
+                                            cursor: doc.status == 'Approved' ? SystemMouseCursors.basic : SystemMouseCursors.click,
                                             child: Container(
                                               width: 15,
                                               height: 15,
@@ -2444,7 +2430,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
                                                   isSelected: answer == 'na',
                                                   selectedBg: Colors.blueGrey.shade100,
                                                   selectedFg: Colors.blueGrey.shade800,
-                                                  onTap: () => _updateDocumentMiniCheckpointAnswer(cp, mini, 'na'),
+                                                  onTap: doc.status == 'Approved' ? null : () => _updateDocumentMiniCheckpointAnswer(cp, mini, 'na'),
                                                 ),
                                                 const SizedBox(width: 4),
                                                 _buildDocumentTriStateButton(
@@ -2452,7 +2438,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
                                                   isSelected: answer == 'yes',
                                                   selectedBg: BankerColors.greenSoft,
                                                   selectedFg: const Color(0xFF0F6E56),
-                                                  onTap: () => _updateDocumentMiniCheckpointAnswer(cp, mini, 'yes'),
+                                                  onTap: doc.status == 'Approved' ? null : () => _updateDocumentMiniCheckpointAnswer(cp, mini, 'yes'),
                                                 ),
                                                 const SizedBox(width: 4),
                                                 _buildDocumentTriStateButton(
@@ -2460,7 +2446,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
                                                   isSelected: answer == 'no',
                                                   selectedBg: BankerColors.redSoft,
                                                   selectedFg: const Color(0xFF991B1B),
-                                                  onTap: () => _updateDocumentMiniCheckpointAnswer(cp, mini, 'no'),
+                                                  onTap: doc.status == 'Approved' ? null : () => _updateDocumentMiniCheckpointAnswer(cp, mini, 'no'),
                                                 ),
                                               ],
                                             ),
@@ -2529,21 +2515,18 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.all(16),
-            height: 350,
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: BankerColors.line2),
             ),
-            child: SingleChildScrollView(
-              child: SelectableText(
-                doc.comparisonReport ?? 'No comparison report generated.',
-                style: const TextStyle(
-                  fontSize: 11.5,
-                  fontFamily: 'Courier',
-                  color: BankerColors.ink,
-                  height: 1.5,
-                ),
+            child: SelectableText(
+              doc.comparisonReport ?? 'No comparison report generated.',
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontFamily: 'Courier',
+                color: BankerColors.ink,
+                height: 1.5,
               ),
             ),
           ),
@@ -2613,13 +2596,13 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
     required bool isSelected,
     required Color selectedBg,
     required Color selectedFg,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
   }) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(4),
       child: MouseRegion(
-        cursor: SystemMouseCursors.click,
+        cursor: onTap == null ? SystemMouseCursors.basic : SystemMouseCursors.click,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
           decoration: BoxDecoration(
