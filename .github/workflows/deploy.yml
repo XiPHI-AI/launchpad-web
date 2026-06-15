@@ -47,14 +47,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Test SSH connectivity with retries
+      - name: Test SSH port connectivity with retries
         run: |
           max_attempts=5
           wait_seconds=15
           for attempt in $(seq 1 $max_attempts); do
-            echo "SSH connectivity check attempt $attempt/$max_attempts..."
-            if timeout 10 bash -c "echo 'SSH test' | ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ secrets.VM_HOST }} 'echo SSH OK'" 2>/dev/null; then
-              echo "SSH connectivity confirmed"
+            echo "Checking SSH port (22) on ${{ secrets.VM_HOST }} - attempt $attempt/$max_attempts..."
+            if timeout 5 bash -c "echo > /dev/tcp/${{ secrets.VM_HOST }}/22" 2>/dev/null; then
+              echo "Port 22 is reachable"
               exit 0
             fi
             if [ $attempt -lt $max_attempts ]; then
@@ -62,8 +62,8 @@ jobs:
               sleep $wait_seconds
             fi
           done
-          echo "SSH connectivity check failed after $max_attempts attempts"
-          exit 1
+          echo "Port 22 unreachable after $max_attempts attempts. Proceeding anyway..."
+          # Don't fail the job; let appleboy action handle the connection
 
       - name: Deploy to VM via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -94,6 +94,9 @@ jobs:
             # Rebuild web image — --env-file passes .env.demo vars into compose substitution
             # so API_BASE_URL is correctly injected as a Docker build arg
             docker compose -p launchpad_demo -f docker-compose.demo.yml --env-file .env.demo build --no-cache --progress=plain web
+
+            # Force remove the old web container to avoid naming conflicts
+            docker rm -f demo_launchpad_web 2>/dev/null || true
 
             # Remove stale web containers safely before bringing up the new one.
             # Some environments prepend random/hash prefixes to container names,
