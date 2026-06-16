@@ -57,7 +57,7 @@ class ComingSoonPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'We are still building this part of LaunchPad. Your account is ready, and this feature will appear here once it ships.',
+                  'We are still building this part of Prospectz.ai. Your account is ready, and this feature will appear here once it ships.',
                   style: textTheme.bodyMedium?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                     height: 1.5,

@@ -4408,52 +4408,43 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                     ),
                   ),
                 );
-              }
-            ),
-          ],
-
-          // Floating message button (FAB) - Always visible, changes icon based on state
-          Positioned(
-            bottom: 24,
-            right: 24,
-            child: GestureDetector(
-              onTap: () {
-                setState(() {
-                  if (_showFloatingChatbot) {
-                    _showFloatingChatbot = false;
-                  } else {
-                    _showFloatingChatbot = true;
-                    // Default to first prospect's ID, or null
-                    _floatingChatbotProspectId = prospects.isNotEmpty ? prospects.first.id : null;
-                    _floatingChatbotLockDropdown = false; // Allow switching when opened via FAB
-                  }
-                });
               },
-              child: MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: BankerColors.navy,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.25),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Icon(
-                    _showFloatingChatbot ? Icons.close_rounded : Icons.message_rounded,
-                    color: Colors.white,
-                    size: 24,
+            ),
+            Positioned(
+              bottom: 24,
+              right: 24,
+              child: GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _showFloatingChatbot = false;
+                  });
+                },
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: BankerColors.navy,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.25),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.close_rounded,
+                      color: Colors.white,
+                      size: 24,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -4892,8 +4883,8 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                               Expanded(
                                 flex: 2,
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                                  alignment: Alignment.center,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  alignment: Alignment.centerLeft,
                                   child: GestureDetector(
                                     onTap: () {
                                       setState(() {
@@ -5424,7 +5415,12 @@ class _BankerDetailPageState extends ConsumerState<BankerDetailPage> {
                 }
               },
             ),
-            const NotificationsSection(),
+            NotificationsSection(
+              isBanker: true,
+              prospectName: prospect.name,
+              founderName: prospect.founderName,
+              bankerName: bankerName,
+            ),
             Expanded(
               child: isMobile
                   ? SingleChildScrollView(

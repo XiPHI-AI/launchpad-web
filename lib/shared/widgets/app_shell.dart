@@ -187,7 +187,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       builder: (_) => ProspectProfileModal(
         prospectId: _prospectId,
         founderName: _resolvedDynamicVariables['userName']?.toString() ?? 'Guest',
-        companyName: _resolvedDynamicVariables['companyName']?.toString() ?? 'Launchpad',
+        companyName: _resolvedDynamicVariables['companyName']?.toString() ?? 'Prospectz.ai',
         initials: _initials,
         stageBucket: widget.stageBucket,
       ),
@@ -319,7 +319,7 @@ class _AppShellState extends ConsumerState<AppShell> {
           appBar: PreferredSize(
             preferredSize: const Size.fromHeight(74),
             child: HubNavBar(
-              companyName: _resolvedDynamicVariables['companyName']?.toString() ?? 'Launchpad',
+              companyName: _resolvedDynamicVariables['companyName']?.toString() ?? 'Prospectz.ai',
               founderName: _resolvedDynamicVariables['userName']?.toString() ?? 'Guest',
               initials: _initials,
               activeLabel: 'Nova',
@@ -373,7 +373,7 @@ class _AppShellState extends ConsumerState<AppShell> {
         appBar: PreferredSize(
           preferredSize: const Size.fromHeight(74),
           child: HubNavBar(
-            companyName: _resolvedDynamicVariables['companyName']?.toString() ?? 'Launchpad',
+            companyName: _resolvedDynamicVariables['companyName']?.toString() ?? 'Prospectz.ai',
             founderName: _resolvedDynamicVariables['userName']?.toString() ?? 'Guest',
             initials: _initials,
             activeLabel: 'Nova',

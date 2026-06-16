@@ -64,7 +64,7 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
 
   String get _companyName {
     final vars = _resolvedProspectForNavbar?.toDynamicVariables();
-    return vars?['companyName']?.toString() ?? 'Launchpad';
+    return vars?['companyName']?.toString() ?? 'Prospectz.ai';
   }
 
   String get _founderName {
@@ -415,7 +415,7 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
                             
                             // Get in touch action
                             InkWell(
-                              onTap: _startSession,
+                              onTap: () => context.go('/banker'),
                               child: Container(
                                 height: double.infinity,
                                 padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -1014,9 +1014,9 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
                                     ),
                                   ),
                                   const SizedBox(height: 22),
-                                  Text('Meet LaunchPad — your startup intelligence partner', style: TextStyle(fontSize: isMobile ? 28 : 40, color: Colors.white, height: 1.18)),
+                                  Text('Meet Prospectz.ai — your startup intelligence partner', style: TextStyle(fontSize: isMobile ? 28 : 40, color: Colors.white, height: 1.18)),
                                   const SizedBox(height: 18),
-                                  Text('We\'ve partnered with LaunchPad to give J.P. Morgan startup clients access to a personalised AI advisor that understands your business and maps your needs to exactly the right financial products — no forms, no waiting.', style: TextStyle(fontSize: 16, color: Colors.white.withOpacity(0.72), height: 1.68)),
+                                  Text('We\'ve partnered with Prospectz.ai to give J.P. Morgan startup clients access to a personalised AI advisor that understands your business and maps your needs to exactly the right financial products — no forms, no waiting.', style: TextStyle(fontSize: 16, color: Colors.white.withOpacity(0.72), height: 1.68)),
                                   const SizedBox(height: 28),
                                   _lpBullet('Voice + text AI that adapts to your startup\'s stage and goals'),
                                   _lpBullet('Instant matching to relevant J.P. Morgan products and services'),
@@ -1029,7 +1029,7 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
                                     runSpacing: 10,
                                     children: [
                                       Text('POWERED BY', style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.4), letterSpacing: 0.8)),
-                                      _lpChip('LaunchPad'),
+                                      _lpChip('Prospectz.ai'),
                                       Text('×', style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.2))),
                                       _lpChip('J.P. Morgan'),
                                     ],
@@ -1064,12 +1064,12 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
                                                   const Size(double.infinity, 50),
                                                 ),
                                               ),
-                                          child: const Text('Get Started with LaunchPad', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                                          child: const Text('Get Started with Prospectz.ai', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                                         ),
                                         const SizedBox(height: 12),
                                         Text('Free for J.P. Morgan startup clients', style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.45))),
                                         const SizedBox(height: 20),
-                                        Text('You\'ll be redirected to LaunchPad with your J.P. Morgan partnership credentials pre-applied.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.35), height: 1.5)),
+                                        Text('You\'ll be redirected to Prospectz.ai with your J.P. Morgan partnership credentials pre-applied.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.35), height: 1.5)),
                                       ],
                                     ),
                                   ),
@@ -1100,9 +1100,9 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
                                           ),
                                         ),
                                         const SizedBox(height: 22),
-                                        Text('Meet LaunchPad — your startup intelligence partner', style: TextStyle(fontSize: 40, color: Colors.white, height: 1.18)),
+                                        Text('Meet Prospectz.ai — your startup intelligence partner', style: TextStyle(fontSize: 40, color: Colors.white, height: 1.18)),
                                         const SizedBox(height: 18),
-                                        Text('We\'ve partnered with LaunchPad to give J.P. Morgan startup clients access to a personalised AI advisor that understands your business and maps your needs to exactly the right financial products — no forms, no waiting.', style: TextStyle(fontSize: 16, color: Colors.white.withOpacity(0.72), height: 1.68)),
+                                        Text('We\'ve partnered with Prospectz.ai to give J.P. Morgan startup clients access to a personalised AI advisor that understands your business and maps your needs to exactly the right financial products — no forms, no waiting.', style: TextStyle(fontSize: 16, color: Colors.white.withOpacity(0.72), height: 1.68)),
                                         const SizedBox(height: 28),
                                         _lpBullet('Voice + text AI that adapts to your startup\'s stage and goals'),
                                         _lpBullet('Instant matching to relevant J.P. Morgan products and services'),
@@ -1115,7 +1115,7 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
                                           runSpacing: 10,
                                           children: [
                                             Text('POWERED BY', style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.4), letterSpacing: 0.8)),
-                                            _lpChip('LaunchPad'),
+                                            _lpChip('Prospectz.ai'),
                                             Text('×', style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.2))),
                                             _lpChip('J.P. Morgan'),
                                           ],
@@ -1155,12 +1155,12 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
                                                     const Size(double.infinity, 50),
                                                   ),
                                                 ),
-                                            child: const Text('Get Started with LaunchPad', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                                            child: const Text('Get Started with Prospectz.ai', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                                           ),
                                           const SizedBox(height: 12),
                                           Text('Free for J.P. Morgan startup clients', style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.45))),
                                           const SizedBox(height: 20),
-                                          Text('You\'ll be redirected to LaunchPad with your J.P. Morgan partnership credentials pre-applied.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.35), height: 1.5)),
+                                          Text('You\'ll be redirected to Prospectz.ai with your J.P. Morgan partnership credentials pre-applied.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.35), height: 1.5)),
                                         ],
                                       ),
                                     ),

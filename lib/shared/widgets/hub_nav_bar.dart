@@ -284,9 +284,9 @@ class HubNavBar extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            companyName.isNotEmpty && companyName != 'Launchpad'
+                            companyName.isNotEmpty && companyName != 'Prospectz.ai'
                                 ? companyName
-                                : 'Launchpad Guest',
+                                : 'Prospectz.ai Guest',
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.6),
                               fontSize: 12,
@@ -500,9 +500,10 @@ class HubNavBar extends StatelessWidget {
               ),
             ],
             const Spacer(),
-            const NavbarNotificationIcon(),
-
-            const SizedBox(width: 16),
+            if (!isBankerView) ...[
+              const NavbarNotificationIcon(),
+              const SizedBox(width: 16),
+            ],
             if (isBankerView && bankers != null && bankers!.isNotEmpty)
               PopupMenuButton<Banker>(
                 offset: const Offset(0, 46),
@@ -605,7 +606,7 @@ class HubNavBar extends StatelessWidget {
                       ),
                       const SizedBox(width: 12),
                       Text(
-                        companyName.isNotEmpty && companyName != 'Launchpad'
+                        companyName.isNotEmpty && companyName != 'Prospectz.ai'
                             ? companyName
                             : founderName.split(' ').first,
                         style: const TextStyle(
@@ -654,7 +655,7 @@ class HubNavBar extends StatelessWidget {
                       ),
                       const SizedBox(width: 12),
                       Text(
-                        companyName.isNotEmpty && companyName != 'Launchpad'
+                        companyName.isNotEmpty && companyName != 'Prospectz.ai'
                             ? companyName
                             : founderName.split(' ').first,
                         style: const TextStyle(

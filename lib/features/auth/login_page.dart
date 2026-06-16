@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:html' as html;
 
 import '../../core/auth/auth_provider.dart';
 import '../../theme/app_theme.dart';
@@ -203,7 +204,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    'LaunchPad for the innovation economy',
+                    'Prospectz.ai for the innovation economy',
                     style: textTheme.labelLarge?.copyWith(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
@@ -237,30 +238,51 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           ],
         ),
         SizedBox(height: compact ? 24 : 48),
-        Wrap(
-          spacing: 16,
-          runSpacing: 16,
-          children: [
-            _buildStatChip('Founder journey', 'Voice-guided onboarding', statTextStyle),
-            _buildStatChip('Relationship hub', 'Context carried across sessions', statTextStyle),
-            _buildStatChip('Banker mode', 'Protected internal workspace', statTextStyle),
-          ],
-        ),
+        if (compact)
+          Column(
+            children: [
+              _buildStatChip('Founder journey', 'Voice-guided onboarding', statTextStyle, isFullWidth: true),
+              const SizedBox(height: 12),
+              _buildStatChip('Relationship hub', 'Context carried across sessions', statTextStyle, isFullWidth: true),
+              const SizedBox(height: 12),
+              _buildStatChip('Banker mode', 'Protected internal workspace', statTextStyle, isFullWidth: true),
+            ],
+          )
+        else
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _buildStatChip('Founder journey', 'Voice-guided onboarding', statTextStyle),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildStatChip('Relationship hub', 'Context carried across sessions', statTextStyle),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildStatChip('Banker mode', 'Protected internal workspace', statTextStyle),
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }
 
-  Widget _buildStatChip(String title, String body, TextStyle? bodyStyle) {
+  Widget _buildStatChip(String title, String body, TextStyle? bodyStyle, {bool isFullWidth = false}) {
     return Container(
-      width: 190,
+      width: isFullWidth ? double.infinity : null,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-      color: Colors.white.withValues(alpha: 0.08),
+        color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             title,
@@ -355,7 +377,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             ),
             const SizedBox(height: 10),
             Text(
-              'Sign in to enter the protected LaunchPad workspace.',
+              'Sign in to enter the protected Prospectz.ai workspace.',
               style: textTheme.bodyLarge?.copyWith(
                 color: Colors.white.withValues(alpha: 0.74),
                 height: 1.5,
@@ -399,7 +421,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               cursorColor: Colors.white,
               decoration: InputDecoration(
                 labelText: 'Email address',
-                hintText: 'admin@launchpad.ai',
+                hintText: 'admin@prospectz.ai',
                 labelStyle: fieldLabelStyle,
                 hintStyle: fieldHintStyle,
                 prefixIcon: Icon(
@@ -534,11 +556,34 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(
-                      'Access is limited to provisioned accounts. If you need credentials or a role update, contact an administrator.',
-                      style: textTheme.bodySmall?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.74),
-                        height: 1.5,
+                    child: RichText(
+                      text: TextSpan(
+                        style: textTheme.bodySmall?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.74),
+                          height: 1.5,
+                        ),
+                        children: [
+                          const TextSpan(text: 'Access is restricted to provisioned accounts. If you need credentials or a role update, contact '),
+                          WidgetSpan(
+                            alignment: PlaceholderAlignment.middle,
+                            child: MouseRegion(
+                              cursor: SystemMouseCursors.click,
+                              child: GestureDetector(
+                                onTap: () {
+                                  html.window.open('mailto:hello@intelligencelabz.ai', '_self');
+                                },
+                                child: const Text(
+                                  'hello@intelligencelabz.ai',
+                                  style: TextStyle(
+                                    color: AppThemeTokens.buttonPrimary,
+                                    decoration: TextDecoration.underline,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),

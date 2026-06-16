@@ -64,7 +64,7 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
     super.dispose();
   }
 
-  static const _defaultCompany = 'Launchpad';
+  static const _defaultCompany = 'Prospectz.ai';
   static const _defaultFounder = 'Profile';
 
   @override
@@ -316,10 +316,11 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _NotificationsSection(
-                    bankerName: _bankerName,
-                    bankerPosition: _bankerPosition,
-                  ),
+                  if (widget.mode != 'banker')
+                    _NotificationsSection(
+                      bankerName: _bankerName,
+                      bankerPosition: _bankerPosition,
+                    ),
                   Expanded(
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -339,6 +340,7 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
                             bankerName: _bankerName,
                             bankerPosition: _bankerPosition,
                             onMessageTap: _onMessageTap,
+                            mode: widget.mode,
                           ),
                         ),
                         SizedBox(
@@ -380,6 +382,7 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
                 bankerName: _bankerName,
                 bankerPosition: _bankerPosition,
                 onMessageTap: _onMessageTap,
+                mode: widget.mode,
               );
 
     final scaffold = Scaffold(
@@ -535,54 +538,192 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
 }
 
 
-NotificationItem _localizeNotification(NotificationItem item, String bankerName) {
-  final firstName = bankerName.split(' ').first;
-  final uppercaseFirst = firstName.toUpperCase();
+NotificationItem _localizeNotification(
+  NotificationItem item,
+  String bankerName, {
+  bool isBanker = false,
+  String? prospectName,
+  String? founderName,
+}) {
+  final String pName = prospectName ?? 'Prospect';
+  final String fName = founderName ?? 'Founder';
+  final String bName = bankerName;
+  final String bFirstName = bankerName.split(' ').first;
 
-  String replaceName(String text) {
-    return text
-        .replaceAll('Sarah Chen', bankerName)
-        .replaceAll('Sarah', firstName)
-        .replaceAll('SARAH', uppercaseFirst)
-        .replaceAll('Sarah\'s', "$firstName's");
+  if (isBanker) {
+    // 1. Swap titles and messages
+    String title = item.title;
+    if (title.contains('added by Sarah')) {
+      title = 'New guide shared with $pName';
+    } else if (title.contains('Sarah reviewed')) {
+      title = '$fName reviewed your guide';
+    }
+
+    String message = item.message;
+    message = message
+        .replaceAll('Intro call with Sarah', 'Intro call with $fName ($pName)')
+        .replaceAll('call with Sarah', 'call with $fName')
+        .replaceAll('Sarah reviewed', '$fName reviewed')
+        .replaceAll('New guide added by Sarah', 'New guide shared with $pName')
+        .replaceAll('Sarah Chen', bName)
+        .replaceAll('Sarah', bFirstName);
+
+    String footer = item.footer;
+    footer = footer.replaceAll('In your learning path', 'Assigned to $pName');
+
+    // 2. Swapped details
+    NotificationDetail? detail;
+    if (item.detail != null) {
+      String? headerLabel = item.detail!.headerLabel;
+      if (headerLabel != null) {
+        headerLabel = headerLabel
+            .replaceAll('ADDED BY SARAH', 'SHARED WITH ${pName.toUpperCase()}')
+            .replaceAll('SARAH', bFirstName.toUpperCase());
+      }
+
+      List<NotificationDetailSection> sections = [];
+      for (var sec in item.detail!.sections) {
+        String secTitle = sec.title;
+        List<String> bullets = [];
+
+        if (secTitle.contains('What Sarah already knows about you')) {
+          secTitle = 'What you already know about $fName';
+          bullets = List.from(sec.bullets);
+        } else if (secTitle.contains('Questions to ask Sarah')) {
+          secTitle = 'Questions to ask $fName';
+          final originalSection3 = item.detail!.sections.firstWhere(
+            (s) => s.title.contains('likely to ask you'),
+            orElse: () => sec,
+          );
+          bullets = originalSection3.bullets.map((b) {
+            return b.replaceAll('"', '');
+          }).toList();
+        } else if (secTitle.contains('Questions Sarah is likely to ask you')) {
+          secTitle = 'Questions $fName is likely to ask you';
+          final originalSection2 = item.detail!.sections.firstWhere(
+            (s) => s.title.contains('Questions to ask Sarah'),
+            orElse: () => sec,
+          );
+          bullets = List.from(originalSection2.bullets);
+        } else if (secTitle.contains('Documents to have on hand')) {
+          secTitle = 'Documents to request from $fName';
+          bullets = List.from(sec.bullets);
+        } else if (secTitle.contains('Next steps agreed')) {
+          secTitle = 'Next steps agreed';
+          bullets = sec.bullets.map((b) {
+            return b
+                .replaceAll('Sarah will send', 'You ($bFirstName) will send')
+                .replaceAll('You will upload', '$fName will upload');
+          }).toList();
+        } else if (secTitle.contains('New material added to your learning path')) {
+          secTitle = 'New material assigned to $fName';
+          bullets = sec.bullets.map((b) {
+            return b.replaceAll('(added by Sarah)', '(assigned by you)');
+          }).toList();
+        } else if (secTitle.contains('About this guide')) {
+          secTitle = 'About this guide';
+          bullets = sec.bullets.map((b) {
+            return b
+                .replaceAll('Added by Sarah Chen based on your Apr 29 call conversation',
+                    'Recommended by you based on your Apr 29 call conversation')
+                .replaceAll('Sarah Chen', bName)
+                .replaceAll('Sarah', bFirstName);
+          }).toList();
+        } else if (secTitle.contains('What you\'ll learn')) {
+          secTitle = 'What they\'ll learn';
+          bullets = List.from(sec.bullets);
+        } else {
+          secTitle = secTitle
+              .replaceAll('Sarah', bFirstName)
+              .replaceAll('you', fName)
+              .replaceAll('your', "$fName's");
+          bullets = sec.bullets.map((b) {
+            return b
+                .replaceAll('Sarah', bFirstName)
+                .replaceAll('you', fName)
+                .replaceAll('your', "$fName's");
+          }).toList();
+        }
+
+        sections.add(NotificationDetailSection(
+          icon: sec.icon,
+          title: secTitle,
+          bullets: bullets,
+        ));
+      }
+
+      detail = NotificationDetail(
+        headerLabel: headerLabel,
+        sections: sections,
+      );
+    }
+
+    return NotificationItem(
+      title: title,
+      message: message,
+      footer: footer,
+      time: item.time,
+      icon: item.icon,
+      iconColor: item.iconColor,
+      bg: item.bg,
+      isPriority: item.isPriority,
+      detail: detail,
+    );
+  } else {
+    final firstName = bankerName.split(' ').first;
+    final uppercaseFirst = firstName.toUpperCase();
+
+    String replaceName(String text) {
+      return text
+          .replaceAll('Sarah Chen', bankerName)
+          .replaceAll('Sarah', firstName)
+          .replaceAll('SARAH', uppercaseFirst)
+          .replaceAll('Sarah\'s', "$firstName's");
+    }
+
+    String? replaceNameOpt(String? text) {
+      if (text == null) return null;
+      return replaceName(text);
+    }
+
+    return NotificationItem(
+      title: replaceName(item.title),
+      message: replaceName(item.message),
+      footer: replaceName(item.footer),
+      time: item.time,
+      icon: item.icon,
+      iconColor: item.iconColor,
+      bg: item.bg,
+      isPriority: item.isPriority,
+      detail: item.detail == null
+          ? null
+          : NotificationDetail(
+              headerLabel: replaceNameOpt(item.detail!.headerLabel),
+              sections: item.detail!.sections.map((sec) {
+                return NotificationDetailSection(
+                  icon: sec.icon,
+                  title: replaceName(sec.title),
+                  bullets: sec.bullets.map((b) => replaceName(b)).toList(),
+                );
+              }).toList(),
+            ),
+    );
   }
-
-  String? replaceNameOpt(String? text) {
-    if (text == null) return null;
-    return replaceName(text);
-  }
-
-  return NotificationItem(
-    title: replaceName(item.title),
-    message: replaceName(item.message),
-    footer: replaceName(item.footer),
-    time: item.time,
-    icon: item.icon,
-    iconColor: item.iconColor,
-    bg: item.bg,
-    isPriority: item.isPriority,
-    detail: item.detail == null
-        ? null
-        : NotificationDetail(
-            headerLabel: replaceNameOpt(item.detail!.headerLabel),
-            sections: item.detail!.sections.map((sec) {
-              return NotificationDetailSection(
-                icon: sec.icon,
-                title: replaceName(sec.title),
-                bullets: sec.bullets.map((b) => replaceName(b)).toList(),
-              );
-            }).toList(),
-          ),
-  );
 }
 
 class _NotificationsSection extends StatefulWidget {
   final String bankerName;
   final String bankerPosition;
+  final bool isBanker;
+  final String? prospectName;
+  final String? founderName;
 
   const _NotificationsSection({
     required this.bankerName,
     required this.bankerPosition,
+    this.isBanker = false,
+    this.prospectName,
+    this.founderName,
   });
 
   @override
@@ -631,7 +772,13 @@ class _NotificationsSectionState extends State<_NotificationsSection> {
   @override
   Widget build(BuildContext context) {
     final activeItems = _notifService.activeHubNotifications.map((item) {
-      return _localizeNotification(item, widget.bankerName);
+      return _localizeNotification(
+        item,
+        widget.bankerName,
+        isBanker: widget.isBanker,
+        prospectName: widget.prospectName,
+        founderName: widget.founderName,
+      );
     }).toList();
     final isMobile = MediaQuery.of(context).size.width < 768;
     if (activeItems.isEmpty) {
@@ -741,8 +888,8 @@ class _HubMainColumn extends StatefulWidget {
   final String bankerName;
   final String bankerPosition;
   final VoidCallback onMessageTap;
-
   final List<ProductPublic> products;
+  final String? mode;
 
   const _HubMainColumn({
     required this.companyName,
@@ -759,6 +906,7 @@ class _HubMainColumn extends StatefulWidget {
     this.trailingPanel,
     this.onTapProduct,
     this.onTapLearning,
+    this.mode,
   });
 
   final void Function(BuildContext context, String title)? onTapLearning;
@@ -891,7 +1039,7 @@ class _HubMainColumnState extends State<_HubMainColumn> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // On mobile, show notifications inside the scroll view
-          if (!isDesktop)
+          if (!isDesktop && widget.mode != 'banker')
             _NotificationsSection(
               bankerName: widget.bankerName,
               bankerPosition: widget.bankerPosition,
@@ -1308,7 +1456,7 @@ class _HubMainColumnState extends State<_HubMainColumn> {
             child: Row(
               children: [
                 Text(
-                  'SHARED DOCUMENTS',
+                  'YOUR SHARED DOCUMENTS',
                   style: TextStyle(
                     fontSize: 12,
                     letterSpacing: 1,
@@ -1458,11 +1606,12 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                 final isMobile = MediaQuery.of(context).size.width < 768;
                 final crossAxisCount = isMobile ? 1 : 2;
                 const spacing = 16.0;
-                final targetItemHeight = isMobile ? 170.0 : 140.0;
+                final targetItemHeight = isMobile ? 155.0 : 145.0;
                 final itemWidth = isMobile
                     ? constraints.maxWidth
                     : (constraints.maxWidth - spacing) / 2;
                 final childAspectRatio = itemWidth / targetItemHeight;
+                final bankerFirstName = widget.bankerName.split(' ').first;
 
                 return GridView.count(
                   crossAxisCount: crossAxisCount,
@@ -1477,7 +1626,7 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                       tag: 'Guide',
                       title: 'Setting up efficient banking early',
                       description:
-                          'Shared by Sarah to help streamline your initial operations.',
+                          'Shared by $bankerFirstName to help streamline your initial operations.',
                       meta: '8 min read · Seed · Operations',
                       defaultHover: !_hasInteractedLearning,
                       showNewBadge: true,
@@ -1490,7 +1639,7 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                       tag: 'Event',
                       title: 'Treasury habits that scale with you',
                       description:
-                          'Added by Sarah based on your discussion about cash management.',
+                          'Added by Michael from our Treasury Team based on your discussion about cash management.',
                       meta: 'May 7 · 1:00 PM ET · 45 min',
                       onInteraction:
                           () => setState(() => _hasInteractedLearning = true),
@@ -1501,7 +1650,7 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                       tag: 'Explainer',
                       title: 'How early-stage treasury accounts work',
                       description:
-                          'A brief explainer shared by Sarah to clarify treasury basics.',
+                          'A brief explainer shared by $bankerFirstName to clarify treasury basics.',
                       meta: '5 min read · Finance leads',
                       onTap: () => widget.onTapLearning?.call(context, 'How early-stage treasury accounts work'),
                     ),
@@ -1510,7 +1659,7 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                       tag: 'Guide',
                       title: 'Preparing for your first credit facility',
                       description:
-                          'Recommended reading by Sarah ahead of your Series A raise.',
+                          'Recommended reading by Elena Rustova ahead of your Series A raise.',
                       meta: '10 min read · Series A · Capital structure',
                       onTap: () => widget.onTapLearning?.call(context, 'Preparing for your first credit facility'),
                     ),
@@ -2080,54 +2229,68 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
 
     // 2. Build Name / Dropdown Widget (Only prospect name, ending with dropdown icon next to it)
     Widget nameWidget;
-    if (widget.prospectsList != null && widget.prospectsList!.isNotEmpty) {
-      nameWidget = DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: widget.prospectId,
-          isExpanded: false,
-          icon: widget.lockDropdown
-              ? const SizedBox.shrink()
-              : const Icon(Icons.arrow_drop_down, color: AppThemeTokens.buttonPrimary),
-          style: const TextStyle(
-            color: AppThemeTokens.modalHeader,
-            fontWeight: FontWeight.w700,
-            fontSize: 14,
-            fontFamily: 'Inter',
-          ),
-          onChanged: widget.lockDropdown
-              ? null
-              : (String? newProspectId) {
-                  if (newProspectId != null && widget.onProspectSelected != null) {
-                    final selected = widget.prospectsList!.firstWhere((p) => p.id == newProspectId);
-                    widget.onProspectSelected!(selected);
-                  }
-                },
-          items: widget.prospectsList!.map<DropdownMenuItem<String>>((CrmProspect p) {
-            return DropdownMenuItem<String>(
-              value: p.id,
-              child: Text(p.name),
-            );
-          }).toList(),
-        ),
-      );
-    } else {
-      final String displayName;
-      if (isBankerChats) {
-        displayName = widget.companyName;
-      } else {
-        displayName = widget.bankerName ?? 'your Banker';
-      }
-      nameWidget = Text(
-        displayName,
+    if (!_inDirectMessagingMode) {
+      nameWidget = const Text(
+        'Nova',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
+        style: TextStyle(
           color: AppThemeTokens.modalHeader,
           fontWeight: FontWeight.w700,
           fontSize: 14,
           fontFamily: 'Inter',
         ),
       );
+    } else {
+      if (widget.prospectsList != null && widget.prospectsList!.isNotEmpty) {
+        nameWidget = DropdownButtonHideUnderline(
+          child: DropdownButton<String>(
+            value: widget.prospectId,
+            isExpanded: false,
+            icon: widget.lockDropdown
+                ? const SizedBox.shrink()
+                : const Icon(Icons.arrow_drop_down, color: AppThemeTokens.buttonPrimary),
+            style: const TextStyle(
+              color: AppThemeTokens.modalHeader,
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+              fontFamily: 'Inter',
+            ),
+            onChanged: widget.lockDropdown
+                ? null
+                : (String? newProspectId) {
+                    if (newProspectId != null && widget.onProspectSelected != null) {
+                      final selected = widget.prospectsList!.firstWhere((p) => p.id == newProspectId);
+                      widget.onProspectSelected!(selected);
+                    }
+                  },
+            items: widget.prospectsList!.map<DropdownMenuItem<String>>((CrmProspect p) {
+              return DropdownMenuItem<String>(
+                value: p.id,
+                child: Text(p.name),
+              );
+            }).toList(),
+          ),
+        );
+      } else {
+        final String displayName;
+        if (isBankerChats) {
+          displayName = widget.companyName;
+        } else {
+          displayName = widget.bankerName ?? 'your Banker';
+        }
+        nameWidget = Text(
+          displayName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: AppThemeTokens.modalHeader,
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
+            fontFamily: 'Inter',
+          ),
+        );
+      }
     }
 
     // 3. Row 1: Icon + NameWidget + Spacer + Segment Switch
@@ -3857,7 +4020,7 @@ class _LearningCardState extends State<_LearningCard> {
                         const SizedBox(height: 6),
                         Text(
                           widget.description!,
-                          maxLines: 2,
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 13,
@@ -6391,11 +6554,17 @@ class AiGuidePanel extends StatelessWidget {
 class NotificationsSection extends StatelessWidget {
   final String bankerName;
   final String bankerPosition;
+  final bool isBanker;
+  final String? prospectName;
+  final String? founderName;
 
   const NotificationsSection({
     super.key,
     this.bankerName = 'Sarah Chen',
     this.bankerPosition = 'Innovation Banking',
+    this.isBanker = false,
+    this.prospectName,
+    this.founderName,
   });
 
   @override
@@ -6403,6 +6572,9 @@ class NotificationsSection extends StatelessWidget {
     return _NotificationsSection(
       bankerName: bankerName,
       bankerPosition: bankerPosition,
+      isBanker: isBanker,
+      prospectName: prospectName,
+      founderName: founderName,
     );
   }
 }

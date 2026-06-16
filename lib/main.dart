@@ -54,7 +54,7 @@ class _LaunchPadAppState extends ConsumerState<LaunchPadApp> {
     });
 
     return MaterialApp.router(
-      title: 'LaunchPad',
+      title: 'Prospectz.ai',
       debugShowCheckedModeBanner: false,
       routerConfig: _router,
       theme: AppTheme.light(),

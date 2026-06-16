@@ -155,7 +155,7 @@ class _StageSelectorPageState extends State<StageSelectorPage> {
                     ),
                     const SizedBox(width: 12),
                     Text(
-                      'JPMC LaunchPad',
+                      'JPMC Prospectz.ai',
                       style: textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                         color: colorScheme.onSurface,
