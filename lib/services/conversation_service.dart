@@ -284,6 +284,7 @@ class ProspectFullProfile {
   final int conversationPhase;
   final String? invitationCode;
   final Map<String, dynamic> aiAttributes;
+  final Map<String, dynamic> aiAttributesHistorical;
   final String? bankerId;
 
   const ProspectFullProfile({
@@ -302,6 +303,7 @@ class ProspectFullProfile {
     this.conversationPhase = 1,
     this.invitationCode,
     this.aiAttributes = const {},
+    this.aiAttributesHistorical = const {},
     this.bankerId,
   });
 }
@@ -432,17 +434,19 @@ class ProspectDocument {
   final double confidenceScore;
   final String? comparisonReport;
   final String? previousVersionDocumentId;
+  final String? driveLink;
   final DateTime uploadedAt;
 
   const ProspectDocument({
     required this.documentId,
     required this.prospectId,
     required this.fileName,
-    required this.version,
-    required this.status,
-    required this.confidenceScore,
+    this.version = 'v1.0',
+    this.status = 'Approved',
+    this.confidenceScore = 0.85,
     this.comparisonReport,
     this.previousVersionDocumentId,
+    this.driveLink,
     required this.uploadedAt,
   });
 
@@ -451,11 +455,12 @@ class ProspectDocument {
       documentId: json['document_id'] as String,
       prospectId: json['prospect_id'] as String,
       fileName: json['file_name'] as String,
-      version: json['version'] as String,
-      status: json['status'] as String? ?? 'Pending',
-      confidenceScore: (json['confidence_score'] as num?)?.toDouble() ?? 0.20,
+      version: json['version'] as String? ?? 'v1.0',
+      status: json['status'] as String? ?? 'Approved',
+      confidenceScore: (json['confidence_score'] as num?)?.toDouble() ?? 0.85,
       comparisonReport: json['comparison_report'] as String?,
       previousVersionDocumentId: json['previous_version_document_id'] as String?,
+      driveLink: json['drive_link'] as String?,
       uploadedAt: DateTime.parse(json['uploaded_at'] as String).toLocal(),
     );
   }
@@ -875,6 +880,11 @@ class ConversationService {
                 (key, value) => MapEntry(key.toString(), value),
               ) ??
               const {},
+      aiAttributesHistorical:
+          (data['ai_attributes_historical'] as Map?)?.map(
+                (key, value) => MapEntry(key.toString(), value),
+              ) ??
+              const {},
       bankerId: data['banker_id'] as String?,
     );
   }
@@ -1150,6 +1160,21 @@ class ConversationService {
     return data
         .map((item) => ProspectDocument.fromJson(item as Map<String, dynamic>))
         .toList();
+  }
+
+  Future<ProspectDocument> uploadProspectDocument(
+    String prospectId,
+    String fileName, {
+    String? driveLink,
+  }) async {
+    final response = await _dio.post(
+      '${ApiConfig.baseUrl}/conversations/prospect/$prospectId/document',
+      data: {
+        'file_name': fileName,
+        if (driveLink != null) 'drive_link': driveLink,
+      },
+    );
+    return ProspectDocument.fromJson(response.data as Map<String, dynamic>);
   }
 
   Future<List<ProspectCheckpoint>> getDocumentCheckpoints(String documentId) async {

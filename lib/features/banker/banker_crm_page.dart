@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'dart:html' as html;
 import '../../shared/widgets/hub_nav_bar.dart';
 import '../../services/prospect_storage.dart';
 import '../../services/conversation_service.dart';
@@ -974,6 +975,32 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
   bool _loadingAuditLogs = false;
   final Map<String, bool> _expandedDocCategories = {};
 
+  ProspectFullProfile? _fullProfile;
+  bool _loadingFullProfile = false;
+
+  Future<void> _fetchFullProfile() async {
+    if (!mounted) return;
+    setState(() {
+      _loadingFullProfile = true;
+    });
+    try {
+      final profile = await ConversationService().getProspectFullProfile(widget.prospectId);
+      if (mounted) {
+        setState(() {
+          _fullProfile = profile;
+          _loadingFullProfile = false;
+        });
+      }
+    } catch (e) {
+      print("Failed to fetch full profile: $e");
+      if (mounted) {
+        setState(() {
+          _loadingFullProfile = false;
+        });
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -981,6 +1008,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
     _fetchSuggestedQuestions();
     _fetchCheckpoints();
     _fetchDocuments();
+    _fetchFullProfile();
   }
 
   @override
@@ -991,6 +1019,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
       _fetchSuggestedQuestions();
       _fetchCheckpoints();
       _fetchDocuments();
+      _fetchFullProfile();
       _selectedDocumentForAnalysis = null;
     }
   }
@@ -1630,10 +1659,6 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
   }
 
   Widget _buildDocumentsTab(CrmProspect prospect) {
-    if (_selectedDocumentForAnalysis != null) {
-      return _buildDocumentAnalysisDetail(prospect, _selectedDocumentForAnalysis!);
-    }
-
     if (_loadingDocuments) {
       return const Center(
         child: Padding(
@@ -1658,7 +1683,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
             ),
             child: const Center(
               child: Text(
-                'No documents available for analysis.',
+                'No documents uploaded yet.',
                 style: TextStyle(fontSize: 12, color: BankerColors.muted),
               ),
             ),
@@ -1680,10 +1705,9 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
             clipBehavior: Clip.antiAlias,
             child: Table(
               columnWidths: const {
-                0: FlexColumnWidth(3.5),
-                1: FlexColumnWidth(1.2),
-                2: FlexColumnWidth(1.5),
-                3: FlexColumnWidth(2),
+                0: FlexColumnWidth(4.0),
+                1: FlexColumnWidth(2.5),
+                2: FlexColumnWidth(2.0),
               },
               defaultVerticalAlignment: TableCellVerticalAlignment.middle,
               children: [
@@ -1694,9 +1718,8 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
                   ),
                   children: [
                     _buildTableHeaderCell('Document Name'),
-                    _buildTableHeaderCell('Version'),
-                    _buildTableHeaderCell('Status'),
-                    _buildTableHeaderCell('Actions'),
+                    _buildTableHeaderCell('Uploaded At'),
+                    _buildTableHeaderCell('Link'),
                   ],
                 ),
                 ..._documents.map((doc) {
@@ -1739,16 +1762,12 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         child: Text(
-                          doc.version,
+                          _formatDateTime(doc.uploadedAt),
                           style: const TextStyle(
                             fontSize: 11,
                             color: BankerColors.muted,
                           ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        child: _buildDocumentStatusBadge(doc.status),
                       ),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1766,13 +1785,22 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
                                 side: const BorderSide(color: BankerColors.blue, width: 0.5),
                               ),
                             ),
-                            onPressed: () => _selectDocumentForAnalysis(doc),
-                            child: const Text(
-                              'Click to Analyze',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
+                            onPressed: doc.driveLink != null && doc.driveLink!.isNotEmpty
+                                ? () => html.window.open(doc.driveLink!, '_blank')
+                                : null,
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.open_in_new, size: 12),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Open in Drive',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -2944,6 +2972,20 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
     );
   }
 
+  String _formatAttributeLabel(String key) {
+    final spaced = key
+        .replaceAll('_', ' ')
+        .replaceAllMapped(
+          RegExp(r'([a-z0-9])([A-Z])'),
+          (match) => '${match.group(1)} ${match.group(2)}',
+        );
+    return spaced
+        .split(' ')
+        .where((word) => word.isNotEmpty)
+        .map((word) => '${word[0].toUpperCase()}${word.substring(1)}')
+        .join(' ');
+  }
+
   Widget _buildNextStepsTab(CrmProspect prospect) {
     final docsTotal = prospect.docsTotalCount;
     final docsReceived = prospect.docsReceivedCount;
@@ -3043,156 +3085,112 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
         ),
         const SizedBox(height: 18),
 
-
-
-        // 2. Documents Requested Section
-        Row(
+        // 2. Attributes Collected from Calls Section
+        const Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: const [
+          children: [
             Text(
-              'Documents requested',
+              'Attributes collected from calls',
               style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: BankerColors.navy),
             ),
           ],
         ),
         const SizedBox(height: 7),
-        if (prospect.docs.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Text(
-              'No documents requested yet.',
-              style: TextStyle(fontSize: 11, color: BankerColors.muted),
+        if (_loadingFullProfile)
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24.0),
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(BankerColors.blue),
+              ),
+            ),
+          )
+        else if (_fullProfile == null || _fullProfile!.aiAttributesHistorical.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: BankerColors.cream,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: BankerColors.line2),
+            ),
+            child: const Center(
+              child: Text(
+                'No attributes collected from calls yet.',
+                style: TextStyle(fontSize: 11, color: BankerColors.muted),
+              ),
             ),
           )
         else
-          Column(
-            children: prospect.docs.map((doc) {
-              Color statusColor = BankerColors.muted2;
-              Color statusBg = BankerColors.cream;
-              if (doc.status == 'Received') {
-                statusColor = const Color(0xFF0F6E56);
-                statusBg = BankerColors.greenSoft;
-              } else if (doc.status == 'Needs review') {
-                statusColor = const Color(0xFF7C5410);
-                statusBg = BankerColors.amberSoft;
-              } else if (doc.status == 'Not uploaded') {
-                statusColor = const Color(0xFF991B1B);
-                statusBg = BankerColors.redSoft;
-              }
-
-              return Container(
-                margin: const EdgeInsets.only(bottom: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                decoration: BoxDecoration(
-                  color: BankerColors.cream,
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.insert_drive_file_outlined, size: 12, color: BankerColors.muted2),
-                    const SizedBox(width: 7),
-                    Expanded(
-                      child: Text(
-                        doc.name,
-                        style: const TextStyle(fontSize: 11, color: BankerColors.ink, fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: statusBg,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        doc.status,
-                        style: TextStyle(fontSize: 10, color: statusColor, fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }).toList(),
-          ),
-        const SizedBox(height: 18),
-
-        // 3. Education Assigned Section
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: const [
-            Text(
-              'Education assigned',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: BankerColors.navy),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: BankerColors.line2),
             ),
-          ],
-        ),
-        const SizedBox(height: 7),
-        if (prospect.education.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Text(
-              'No education guides assigned yet.',
-              style: TextStyle(fontSize: 11, color: BankerColors.muted),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: _fullProfile!.aiAttributesHistorical.entries.map((entry) {
+                final valStr = entry.value.toString();
+                final prevIndex = valStr.indexOf(' (Previously: ');
+                Widget valueWidget;
+                if (prevIndex != -1) {
+                  final currentVal = valStr.substring(0, prevIndex);
+                  final prevVal = valStr.substring(prevIndex);
+                  valueWidget = RichText(
+                    text: TextSpan(
+                      style: const TextStyle(fontSize: 11, color: BankerColors.ink, fontFamily: 'Outfit'),
+                      children: [
+                        TextSpan(text: currentVal, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        TextSpan(
+                          text: prevVal,
+                          style: const TextStyle(
+                            color: BankerColors.muted2,
+                            fontStyle: FontStyle.italic,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                } else {
+                  valueWidget = Text(
+                    valStr,
+                    style: const TextStyle(fontSize: 11, color: BankerColors.ink),
+                  );
+                }
+
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: const BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: BankerColors.line, width: 0.5),
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: Text(
+                          _formatAttributeLabel(entry.key),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: BankerColors.navy,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 5,
+                        child: valueWidget,
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
             ),
-          )
-        else
-          Column(
-            children: prospect.education.map((edu) {
-              return Container(
-                margin: const EdgeInsets.only(bottom: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                decoration: BoxDecoration(
-                  color: BankerColors.cream,
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 3,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        color: edu.stripeColor,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            edu.title,
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: BankerColors.ink),
-                          ),
-                          const SizedBox(height: 1),
-                          Row(
-                            children: [
-                              _buildEduTag(edu.tag),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  edu.status.replaceAll('${edu.tag} · ', ''),
-                                  style: const TextStyle(fontSize: 10, color: BankerColors.muted2),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () {
-                        ref.read(bankerProspectsProvider.notifier).removeEducation(prospect.id, edu.title);
-                      },
-                      child: const MouseRegion(
-                        cursor: SystemMouseCursors.click,
-                        child: Icon(Icons.close, size: 14, color: BankerColors.muted2),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }).toList(),
           ),
       ],
     );

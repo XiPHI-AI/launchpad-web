@@ -982,11 +982,28 @@ class _HubMainColumnState extends State<_HubMainColumn> {
   bool _hasInteractedProducts = false;
   bool _hasInteractedLearning = false;
   bool _showAllProducts = false;
+  List<ProspectDocument> _documents = [];
+  bool _loadingDocs = false;
 
-  final List<Map<String, String>> _documents = [
-    {'name': 'Investor overview deck.pdf', 'status': 'Shared'},
-    {'name': 'Product one-pager.docx', 'status': 'Needs review'},
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadDocs();
+  }
+
+  void _loadDocs() async {
+    if (widget.prospectId == null) return;
+    setState(() => _loadingDocs = true);
+    try {
+      final list = await ConversationService().getDocumentList(widget.prospectId!);
+      setState(() {
+        _documents = list;
+        _loadingDocs = false;
+      });
+    } catch (e) {
+      setState(() => _loadingDocs = false);
+    }
+  }
 
   DateTime? _scheduledCallDate;
   bool _hasAddedMeetingToCalendar = false;
@@ -1088,14 +1105,29 @@ class _HubMainColumnState extends State<_HubMainColumn> {
     showDialog<String>(
       context: context,
       builder: (_) => const _UploadDocModal(),
-    ).then((fileName) {
+    ).then((fileName) async {
       if (fileName != null && fileName.isNotEmpty) {
-        setState(() {
-          _documents.add({
-            'name': fileName,
-            'status': 'Shared',
-          });
-        });
+        if (widget.prospectId != null) {
+          try {
+            final mockLink = 'https://drive.google.com/open?id=uploaded_${DateTime.now().millisecondsSinceEpoch}';
+            final newDoc = await ConversationService().uploadProspectDocument(
+              widget.prospectId!,
+              fileName,
+              driveLink: mockLink,
+            );
+            setState(() {
+              _documents.add(newDoc);
+            });
+          } catch (e) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to upload "$fileName": $e'),
+                backgroundColor: Colors.red,
+              ),
+            );
+            return;
+          }
+        }
         
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1616,13 +1648,30 @@ class _HubMainColumnState extends State<_HubMainColumn> {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 22),
-            child: Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: _documents.map((doc) {
-                return _DocChip(doc['name'] ?? '', doc['status'] ?? 'Shared');
-              }).toList(),
-            ),
+            child: _loadingDocs
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(12.0),
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0A4A8A)),
+                      ),
+                    ),
+                  )
+                : Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: _documents.map((doc) {
+                      return _DocChip(
+                        doc.fileName,
+                        'Shared',
+                        onTap: () {
+                          if (doc.driveLink != null && doc.driveLink!.isNotEmpty) {
+                            html.window.open(doc.driveLink!, '_blank');
+                          }
+                        },
+                      );
+                    }).toList(),
+                  ),
           ),
           Container(height: 1, color: const Color(0xFFE7DCC8)),
           Padding(
@@ -3580,49 +3629,56 @@ class _CopyLinkButtonState extends State<_CopyLinkButton> {
 class _DocChip extends StatelessWidget {
   final String label;
   final String status;
+  final VoidCallback? onTap;
 
-  const _DocChip(this.label, this.status);
+  const _DocChip(this.label, this.status, {this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final isShared = status == 'Shared';
     final isReview = status == 'Needs review';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE1D9CB)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.insert_drive_file_outlined,
-              size: 16, color: Color(0xFF8D8578)),
-          const SizedBox(width: 8),
-          Text(label, style: const TextStyle(fontSize: 13)),
-          const SizedBox(width: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: isShared
-                  ? const Color(0xFFE1F5EE)
-                  : isReview
-                      ? const Color(0xFFFBEAD5)
-                      : const Color(0xFFFBEAD5),
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Text(
-              status,
-              style: TextStyle(
-                fontSize: 11,
-                color: isShared
-                    ? const Color(0xFF0F6E56)
-                    : const Color(0xFF7C5410),
-              ),
-            ),
+    return MouseRegion(
+      cursor: onTap != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE1D9CB)),
           ),
-        ],
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.insert_drive_file_outlined,
+                  size: 16, color: Color(0xFF8D8578)),
+              const SizedBox(width: 8),
+              Text(label, style: const TextStyle(fontSize: 13)),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isShared
+                      ? const Color(0xFFE1F5EE)
+                      : isReview
+                          ? const Color(0xFFFBEAD5)
+                          : const Color(0xFFFBEAD5),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  status,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isShared
+                        ? const Color(0xFF0F6E56)
+                        : const Color(0xFF7C5410),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
