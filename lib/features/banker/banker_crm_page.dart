@@ -3,9 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../shared/widgets/hub_nav_bar.dart';
-import '../../shared/widgets/prospect_id_provider.dart';
 import '../../services/prospect_storage.dart';
 import '../../services/conversation_service.dart';
+import '../../services/notification_service.dart';
 import '../relationship_hub/relationship_hub_page.dart';
 
 // --- COLOR PALETTE FROM HTML ---
@@ -1203,61 +1203,15 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
         ),
 
         // Actions
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: BankerColors.line2)),
-          ),
-          child: Row(
-            children: [
-              ElevatedButton(
-                onPressed: () => _showAssignModal(context, prospect),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: BankerColors.navy,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                child: const Text(
-                  '+ Assign education',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                ),
-              ),
-              const SizedBox(width: 6),
-              OutlinedButton(
-                onPressed: () => _showDocModal(context, prospect),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  side: const BorderSide(color: BankerColors.line2),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                child: const Text(
-                  '+ Request doc',
-                  style: TextStyle(fontSize: 11, color: BankerColors.ink, fontWeight: FontWeight.bold),
-                ),
-              ),
-              const SizedBox(width: 6),
-              OutlinedButton(
-                onPressed: () {
-                  if (widget.onMessageTap != null) {
-                    widget.onMessageTap!();
-                  } else {
-                    _showMsgModal(context, prospect);
-                  }
-                },
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  side: const BorderSide(color: BankerColors.line2),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                child: const Text(
-                  'Message',
-                  style: TextStyle(fontSize: 11, color: BankerColors.ink, fontWeight: FontWeight.bold),
-                ),
-              ),
-              const Spacer(),
-              if (!widget.showBackButton)
+        if (!widget.showBackButton)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: BankerColors.line2)),
+            ),
+            child: Row(
+              children: [
+                const Spacer(),
                 TextButton(
                   onPressed: () {
                     context.go('/banker/${prospect.id}');
@@ -1267,9 +1221,9 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
                     style: TextStyle(fontSize: 11, color: BankerColors.blue, fontWeight: FontWeight.bold),
                   ),
                 ),
-            ],
+              ],
+            ),
           ),
-        ),
 
         // Tabs Header
         Container(
@@ -1282,7 +1236,6 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
               _buildTabButton('Documents', 'documents'),
               _buildTabButton('Recommended products', 'products'),
               _buildTabButton('Suggested questions', 'questions'),
-              _buildTabButton('Notes', 'notes'),
             ],
           ),
         ),
@@ -1344,8 +1297,6 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
         return _buildRecommendedProductsTab(prospect);
       case 'questions':
         return _buildSuggestedQuestionsTab(prospect);
-      case 'notes':
-        return _buildNotesTab(prospect);
       default:
         return const SizedBox.shrink();
     }
@@ -3097,20 +3048,10 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
         // 2. Documents Requested Section
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
+          children: const [
+            Text(
               'Documents requested',
               style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: BankerColors.navy),
-            ),
-            GestureDetector(
-              onTap: () => _showDocModal(context, prospect),
-              child: const MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: Text(
-                  '+ Request',
-                  style: TextStyle(fontSize: 10, color: BankerColors.blue, fontWeight: FontWeight.bold),
-                ),
-              ),
             ),
           ],
         ),
@@ -3177,20 +3118,10 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
         // 3. Education Assigned Section
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
+          children: const [
+            Text(
               'Education assigned',
               style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: BankerColors.navy),
-            ),
-            GestureDetector(
-              onTap: () => _showAssignModal(context, prospect),
-              child: const MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: Text(
-                  '+ Assign',
-                  style: TextStyle(fontSize: 10, color: BankerColors.blue, fontWeight: FontWeight.bold),
-                ),
-              ),
             ),
           ],
         ),
@@ -3560,57 +3491,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
     );
   }
 
-  Widget _buildNotesTab(CrmProspect prospect) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text(
-          'Private · only visible to you',
-          style: TextStyle(fontSize: 11, color: BankerColors.muted2),
-        ),
-        const SizedBox(height: 4),
-        Container(
-          decoration: BoxDecoration(
-            color: BankerColors.cream,
-            borderRadius: BorderRadius.circular(9),
-            border: Border.all(color: BankerColors.line2),
-          ),
-          child: TextField(
-            controller: _notesController,
-            maxLines: 8,
-            style: const TextStyle(fontSize: 11, color: BankerColors.ink, height: 1.4),
-            decoration: const InputDecoration(
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: ElevatedButton(
-            onPressed: () {
-              ref.read(bankerProspectsProvider.notifier).updateNotes(prospect.id, _notesController.text);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Note saved successfully!'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: BankerColors.navy,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: const Text('Save note', style: TextStyle(fontSize: 11)),
-          ),
-        ),
-      ],
-    );
-  }
+
 
   // --- ACTIONS MODALS INSIDE PANEL ---
 
@@ -4135,10 +4016,23 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
   String? _floatingChatbotProspectId;
   bool _floatingChatbotLockDropdown = false;
 
+  final NotificationService _notifService = NotificationService();
+
+  @override
+  void initState() {
+    super.initState();
+    _notifService.addListener(_onServiceUpdate);
+  }
+
   @override
   void dispose() {
+    _notifService.removeListener(_onServiceUpdate);
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onServiceUpdate() {
+    if (mounted) setState(() {});
   }
 
   // --- FILTER & SORT LOGIC ---
@@ -4255,6 +4149,40 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
       return p.bankerId == activeBanker.bankerId;
     }).toList();
 
+    final targetProspect = prospects.firstWhere(
+      (p) => p.name.contains("123") || p.id == "68ac5ad3-9bbd-40b6-acdf-cdda65a78e1b",
+      orElse: () => prospects.isNotEmpty
+          ? prospects.first
+          : CrmProspect(
+              id: 'default',
+              name: "123's",
+              email: '',
+              sector: 'Fintech',
+              stage: 'Seed',
+              status: 'In conversation',
+              profileProgress: 0.45,
+              docsReceivedText: '0/2 received',
+              docsReceivedCount: 0,
+              docsTotalCount: 2,
+              materialsReadText: '0 / 1',
+              materialsReadSub: '1 unread',
+              lastActive: 'Today',
+              avatarText: '1',
+              avatarBg: Colors.blue,
+              avatarFg: Colors.white,
+              founderName: 'Gil',
+              stageBucket: 'super_agent',
+              phoneNumber: '',
+              headcount: '',
+              incorporated: true,
+              priorities: const [],
+              docs: const [],
+              education: const [],
+              activity: const [],
+              notes: '',
+            ),
+    );
+
     // Dynamic stats computations
     final activeCount = prospects.length;
     final needsActionCount = prospects.where((p) => p.status.contains('Awaiting docs') || p.status.contains('Call')).length;
@@ -4306,6 +4234,15 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (_notifService.activeHubNotifications.isNotEmpty)
+                NotificationsSection(
+                  isBanker: true,
+                  prospectName: targetProspect.name,
+                  founderName: targetProspect.founderName,
+                  bankerName: bankerName,
+                  prospectsList: prospects,
+                ),
+
               // 1. SUMMARY BAR
               _buildSummaryBar(
                 isMobile: isMobile,
@@ -4692,6 +4629,7 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
 
   Widget _buildCrmTable(List<CrmProspect> prospects) {
     final list = _getFilteredAndSortedProspects(prospects);
+    final activeBanker = ref.watch(activeBankerProvider);
 
     return Column(
       children: [
@@ -4750,20 +4688,45 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                                   alignment: Alignment.centerLeft,
                                   child: Row(
                                     children: [
-                                      Container(
-                                        width: 30,
-                                        height: 30,
-                                        decoration: BoxDecoration(color: prospect.avatarBg, shape: BoxShape.circle),
-                                        alignment: Alignment.center,
-                                        child: Text(
-                                          prospect.avatarText,
-                                          style: TextStyle(
-                                            fontFamily: 'DM Serif Display',
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                            color: prospect.avatarFg,
+                                      Stack(
+                                        clipBehavior: Clip.none,
+                                        children: [
+                                          Container(
+                                            width: 30,
+                                            height: 30,
+                                            decoration: BoxDecoration(color: prospect.avatarBg, shape: BoxShape.circle),
+                                            alignment: Alignment.center,
+                                            child: Text(
+                                              prospect.avatarText,
+                                              style: TextStyle(
+                                                fontFamily: 'DM Serif Display',
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                                color: prospect.avatarFg,
+                                              ),
+                                            ),
                                           ),
-                                        ),
+                                          if (() {
+                                            for (var item in _notifService.activeHubNotifications) {
+                                              final assigned = getProspectForNotification(item, prospects);
+                                              if (assigned.id == prospect.id) return true;
+                                            }
+                                            return false;
+                                          }())
+                                            Positioned(
+                                              top: -2,
+                                              right: -2,
+                                              child: Container(
+                                                width: 10,
+                                                height: 10,
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFFE0533C),
+                                                  shape: BoxShape.circle,
+                                                  border: Border.all(color: Colors.white, width: 1.5),
+                                                ),
+                                              ),
+                                            ),
+                                        ],
                                       ),
                                       const SizedBox(width: 9),
                                       Expanded(
@@ -4885,26 +4848,56 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 12),
                                   alignment: Alignment.centerLeft,
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        _showFloatingChatbot = true;
-                                        _floatingChatbotProspectId = prospect.id;
-                                        _floatingChatbotLockDropdown = true;
-                                      });
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        border: Border.all(color: BankerColors.line2),
-                                        borderRadius: BorderRadius.circular(6),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      GestureDetector(
+                                        onTap: () {
+                                          setState(() {
+                                            _showFloatingChatbot = true;
+                                            _floatingChatbotProspectId = prospect.id;
+                                            _floatingChatbotLockDropdown = true;
+                                          });
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            border: Border.all(color: BankerColors.line2),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            prospect.status.contains('Waiting') ? 'Nudge' : 'Message',
+                                            style: const TextStyle(fontSize: 10, color: BankerColors.ink, fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
                                       ),
-                                      child: Text(
-                                        prospect.status.contains('Waiting') ? 'Nudge' : 'Message',
-                                        style: const TextStyle(fontSize: 10, color: BankerColors.ink, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
+                                      if (activeBanker?.role == 'manager') ...[
+                                        const SizedBox(width: 4),
+                                        PopupMenuButton<String>(
+                                          icon: const Icon(Icons.more_vert, size: 16, color: BankerColors.muted),
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                          onSelected: (val) {
+                                            if (val == 'reassign') {
+                                              _showReassignProspectDialog(prospect);
+                                            } else if (val == 'unassign') {
+                                              _unassignProspect(prospect);
+                                            }
+                                          },
+                                          itemBuilder: (ctx) => [
+                                            const PopupMenuItem(
+                                              value: 'reassign',
+                                              child: Text('Reassign Prospect', style: TextStyle(fontSize: 12)),
+                                            ),
+                                            const PopupMenuItem(
+                                              value: 'unassign',
+                                              child: Text('Unassign Prospect', style: TextStyle(fontSize: 12, color: Colors.red)),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                 ),
                               ),
@@ -5033,9 +5026,355 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
               final companyName = ((p['company_name'] ?? '') as String).toLowerCase();
               final fullName = ((p['full_name'] ?? '') as String).toLowerCase();
               final email = ((p['email'] ?? '') as String).toLowerCase();
+              final prospectId = ((p['prospect_id'] ?? '') as String).toLowerCase();
+              final fallbackName = 'prospect - ${prospectId.length >= 8 ? prospectId.substring(0, 8) : prospectId}';
               final q = _search.toLowerCase();
-              return companyName.contains(q) || fullName.contains(q) || email.contains(q);
+              return companyName.contains(q) ||
+                  fullName.contains(q) ||
+                  email.contains(q) ||
+                  fallbackName.contains(q) ||
+                  prospectId.contains(q);
             }).toList();
+
+            Future<void> _handleAssign(
+              String prospectId,
+              String displayName,
+              String email,
+              String industry,
+              String initials,
+              Map<String, dynamic> p,
+            ) async {
+              if (_assigning[prospectId] == true) return;
+
+              final bankers = ref.read(bankersProvider).value ?? [];
+              if (bankers.isEmpty) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(content: Text('No bankers available to assign.')),
+                );
+                return;
+              }
+
+              final aiSuggestedIndex = prospectId.hashCode.abs() % bankers.length;
+              final aiSuggestedBanker = bankers[aiSuggestedIndex];
+
+              Banker? selectedBanker = aiSuggestedBanker;
+              String _bankerSearch = '';
+              bool isSaving = false;
+
+              final assignedResult = await showDialog<bool>(
+                context: dialogContext,
+                builder: (assignContext) {
+                  return StatefulBuilder(
+                    builder: (ctx, setAssignState) {
+                      final filteredBankers = bankers.where((b) {
+                        final name = (b.name ?? '').toLowerCase();
+                        final email = b.email.toLowerCase();
+                        final q = _bankerSearch.toLowerCase();
+                        return name.contains(q) || email.contains(q);
+                      }).toList();
+
+                      final isAiSuggested = selectedBanker?.bankerId == aiSuggestedBanker.bankerId;
+                      final buttonText = isAiSuggested ? 'Assign Prospect' : 'Override Match Recommendations';
+
+                      return Dialog(
+                        backgroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        child: Container(
+                          width: 520,
+                          constraints: const BoxConstraints(maxHeight: 600),
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Header
+                              Row(
+                                children: [
+                                  const Icon(Icons.person_add_rounded, color: BankerColors.navy, size: 20),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Assign: $displayName',
+                                      style: const TextStyle(
+                                        fontFamily: 'DM Serif Display',
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: BankerColors.navy,
+                                      ),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.close, size: 18, color: BankerColors.muted),
+                                    onPressed: () => Navigator.pop(assignContext, false),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Select a banker to assign to this prospect.',
+                                style: TextStyle(color: BankerColors.muted, fontSize: 13),
+                              ),
+                              const SizedBox(height: 16),
+                              // Search bar
+                              TextField(
+                                onChanged: (val) => setAssignState(() => _bankerSearch = val),
+                                style: const TextStyle(fontSize: 12),
+                                decoration: InputDecoration(
+                                  hintText: 'Search bankers by name or email...',
+                                  prefixIcon: const Icon(Icons.search, size: 16, color: BankerColors.muted),
+                                  contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: BankerColors.line)),
+                                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: BankerColors.line)),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              // Column Headers
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFF9F9FB),
+                                  border: Border(bottom: BorderSide(color: BankerColors.line, width: 1)),
+                                ),
+                                child: Row(
+                                  children: const [
+                                    Expanded(flex: 3, child: Text('BANKER', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: BankerColors.muted2))),
+                                    Expanded(flex: 2, child: Text('ROLE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: BankerColors.muted2))),
+                                    Expanded(flex: 2, child: Text('AI SUGGESTED', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: BankerColors.muted2))),
+                                  ],
+                                ),
+                              ),
+                              // List
+                              Expanded(
+                                child: filteredBankers.isEmpty
+                                    ? const Center(child: Text('No bankers found.', style: TextStyle(color: BankerColors.muted)))
+                                    : ListView.separated(
+                                        itemCount: filteredBankers.length,
+                                        separatorBuilder: (c, idx) => const Divider(height: 1, color: BankerColors.line),
+                                        itemBuilder: (c, idx) {
+                                          final b = filteredBankers[idx];
+                                          final isSelected = selectedBanker?.bankerId == b.bankerId;
+                                          final bIsSuggested = b.bankerId == aiSuggestedBanker.bankerId;
+                                          final bInitials = b.name != null
+                                              ? b.name!.split(' ').map((e) => e.isNotEmpty ? e[0].toUpperCase() : '').take(2).join()
+                                              : 'B';
+
+                                          return InkWell(
+                                            onTap: () => setAssignState(() => selectedBanker = b),
+                                            child: Container(
+                                              color: isSelected ? const Color(0xFFF0F4F8) : Colors.transparent,
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                              child: Row(
+                                                children: [
+                                                  // Banker Info
+                                                  Expanded(
+                                                    flex: 3,
+                                                    child: Row(
+                                                      children: [
+                                                        Container(
+                                                          width: 28,
+                                                          height: 28,
+                                                          decoration: BoxDecoration(
+                                                            color: isSelected ? BankerColors.navy : const Color(0xFFE2E8F0),
+                                                            shape: BoxShape.circle,
+                                                          ),
+                                                          alignment: Alignment.center,
+                                                          child: Text(
+                                                            bInitials,
+                                                            style: TextStyle(
+                                                              color: isSelected ? Colors.white : BankerColors.ink,
+                                                              fontSize: 10,
+                                                              fontWeight: FontWeight.bold,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        const SizedBox(width: 10),
+                                                        Expanded(
+                                                          child: Column(
+                                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                                            children: [
+                                                              Text(
+                                                                b.name ?? b.email,
+                                                                style: TextStyle(
+                                                                  fontSize: 12,
+                                                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                                                  color: BankerColors.ink,
+                                                                ),
+                                                                overflow: TextOverflow.ellipsis,
+                                                              ),
+                                                              if (b.name != null)
+                                                                Text(
+                                                                  b.email,
+                                                                  style: const TextStyle(fontSize: 10, color: BankerColors.muted2),
+                                                                  overflow: TextOverflow.ellipsis,
+                                                                ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  // Role
+                                                  Expanded(
+                                                    flex: 2,
+                                                    child: Align(
+                                                      alignment: Alignment.centerLeft,
+                                                      child: Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                        decoration: BoxDecoration(
+                                                          color: b.role == 'manager' ? const Color(0xFFFEF3C7) : const Color(0xFFF1F5F9),
+                                                          borderRadius: BorderRadius.circular(4),
+                                                        ),
+                                                        child: Text(
+                                                          b.role == 'manager' ? 'Team Lead' : (b.position ?? 'Associate'),
+                                                          style: TextStyle(
+                                                            color: b.role == 'manager' ? const Color(0xFF92400E) : const Color(0xFF475569),
+                                                            fontSize: 10,
+                                                            fontWeight: FontWeight.bold,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  // AI Suggested
+                                                  Expanded(
+                                                    flex: 2,
+                                                    child: Align(
+                                                      alignment: Alignment.centerLeft,
+                                                      child: bIsSuggested
+                                                          ? Container(
+                                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                              decoration: BoxDecoration(
+                                                                color: const Color(0xFFDCFCE7),
+                                                                borderRadius: BorderRadius.circular(12),
+                                                              ),
+                                                              child: Row(
+                                                                mainAxisSize: MainAxisSize.min,
+                                                                children: const [
+                                                                  Icon(Icons.auto_awesome, color: Color(0xFF166534), size: 10),
+                                                                  SizedBox(width: 4),
+                                                                  Text(
+                                                                    'AI Suggested',
+                                                                    style: TextStyle(color: Color(0xFF166534), fontSize: 9, fontWeight: FontWeight.bold),
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                            )
+                                                          : const Text('—', style: TextStyle(color: BankerColors.muted2, fontSize: 11)),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                              ),
+                              const SizedBox(height: 16),
+                              // Action Buttons
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(assignContext, false),
+                                    child: const Text('Cancel', style: TextStyle(color: BankerColors.muted)),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  ElevatedButton(
+                                    onPressed: (selectedBanker == null || isSaving)
+                                        ? null
+                                        : () async {
+                                            setAssignState(() => isSaving = true);
+                                            try {
+                                              await ConversationService().assignProspectToBanker(prospectId, selectedBanker!.bankerId);
+                                              Navigator.pop(assignContext, true);
+                                              ScaffoldMessenger.of(dialogContext).showSnackBar(
+                                                SnackBar(content: Text('Successfully assigned $displayName to ${selectedBanker!.name ?? selectedBanker!.email}')),
+                                              );
+                                              // If assigned to active banker, add to their notifier, otherwise reload
+                                              if (selectedBanker!.bankerId == activeBanker.bankerId) {
+                                                final avatarInitials = initials.isEmpty ? '?' : initials;
+                                                final newProspect = CrmProspect(
+                                                  id: prospectId,
+                                                  name: displayName,
+                                                  email: email,
+                                                  sector: industry.isNotEmpty ? industry : 'Technology',
+                                                  stage: (() {
+                                                    final bucket = p['stage_bucket'] as String? ?? '';
+                                                    if (bucket == 'pre_seed') return 'Pre-seed';
+                                                    if (bucket == 'seed') return 'Seed';
+                                                    if (bucket == 'early_stage') return 'Series A';
+                                                    if (bucket == 'growth_stage') return 'Series B';
+                                                    return 'Seed';
+                                                  })(),
+                                                  status: 'In conversation',
+                                                  profileProgress: 0.5,
+                                                  docsReceivedText: '0/2 received',
+                                                  docsReceivedCount: 0,
+                                                  docsTotalCount: 2,
+                                                  materialsReadText: '—',
+                                                  materialsReadSub: '',
+                                                  lastActive: 'Today',
+                                                  avatarText: avatarInitials,
+                                                  avatarBg: BankerColors.blueSoft,
+                                                  avatarFg: BankerColors.blue,
+                                                  docs: [],
+                                                  education: [],
+                                                  activity: [
+                                                    CrmActivity(
+                                                      icon: Icons.person_add_rounded,
+                                                      iconBg: BankerColors.blueSoft,
+                                                      iconColor: BankerColors.blue,
+                                                      text: 'Prospect assigned to ${selectedBanker!.name ?? selectedBanker!.email}',
+                                                      time: 'Today',
+                                                    ),
+                                                  ],
+                                                  notes: '',
+                                                  bankerId: selectedBanker!.bankerId,
+                                                  founderName: p['full_name'] as String? ?? displayName,
+                                                  stageBucket: p['stage_bucket'] as String? ?? 'seed',
+                                                );
+                                                ref.read(bankerProspectsProvider.notifier).addProspect(newProspect);
+                                              } else {
+                                                // Just reload prospects list
+                                                ref.read(bankerProspectsProvider.notifier).loadProspects();
+                                              }
+                                            } catch (e) {
+                                              setAssignState(() => isSaving = false);
+                                              ScaffoldMessenger.of(dialogContext).showSnackBar(
+                                                SnackBar(content: Text('Failed to assign: $e')),
+                                              );
+                                            }
+                                          },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: isAiSuggested ? BankerColors.navy : const Color(0xFFD97706),
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                    child: isSaving
+                                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                        : Text(buttonText, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              );
+
+              if (assignedResult == true) {
+                // Remove from unassigned list
+                setModalState(() {
+                  _unassigned.removeWhere((item) => item['prospect_id'] == prospectId);
+                });
+              }
+            }
 
             return Dialog(
               backgroundColor: Colors.white,
@@ -5139,137 +5478,87 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                                     final fullName = p['full_name'] as String? ?? '';
                                     final email = p['email'] as String? ?? '';
                                     final industry = p['industry'] as String? ?? '';
-                                    final displayName = companyName.isNotEmpty ? companyName : (fullName.isNotEmpty ? fullName : email);
+                                    final displayName = companyName.isNotEmpty
+                                        ? companyName
+                                        : (fullName.isNotEmpty
+                                            ? fullName
+                                            : (email.isNotEmpty ? email : 'Prospect - ${prospectId.length >= 8 ? prospectId.substring(0, 8) : prospectId}'));
                                     final subtitle = [
                                       if (fullName.isNotEmpty && companyName.isNotEmpty) fullName,
                                       if (industry.isNotEmpty) industry,
-                                      if (email.isNotEmpty) email,
+                                      email.isNotEmpty ? email : 'No email provided',
                                     ].join(' · ');
                                     final initials = displayName.split(' ').map((e) => e.isNotEmpty ? e[0].toUpperCase() : '').take(2).join();
                                     final isAssigning = _assigning[prospectId] == true;
 
                                     return Padding(
                                       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
-                                      child: Row(
-                                        children: [
-                                          // Avatar
-                                          Container(
-                                            width: 36,
-                                            height: 36,
-                                            decoration: BoxDecoration(
-                                              color: BankerColors.blueSoft,
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: Center(
-                                              child: Text(
-                                                initials.isEmpty ? '?' : initials,
-                                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: BankerColors.blue),
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 10),
-                                          // Name + subtitle
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  displayName,
-                                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: BankerColors.navy),
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
+                                      child: MouseRegion(
+                                        cursor: SystemMouseCursors.click,
+                                        child: GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
+                                          onTap: isAssigning ? null : () => _handleAssign(prospectId, displayName, email, industry, initials, p),
+                                          child: Row(
+                                            children: [
+                                              // Avatar
+                                              Container(
+                                                width: 36,
+                                                height: 36,
+                                                decoration: BoxDecoration(
+                                                  color: BankerColors.blueSoft,
+                                                  shape: BoxShape.circle,
                                                 ),
-                                                if (subtitle.isNotEmpty)
-                                                  Text(
-                                                    subtitle,
-                                                    style: const TextStyle(fontSize: 11, color: BankerColors.muted),
-                                                    maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
+                                                child: Center(
+                                                  child: Text(
+                                                    initials.isEmpty ? '?' : initials,
+                                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: BankerColors.blue),
                                                   ),
-                                              ],
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          // Assign button
-                                          SizedBox(
-                                            width: 70,
-                                            height: 30,
-                                            child: ElevatedButton(
-                                              onPressed: isAssigning ? null : () async {
-                                                setModalState(() => _assigning[prospectId] = true);
-                                                try {
-                                                  await ConversationService().assignProspectToBanker(
-                                                    prospectId,
-                                                    activeBanker.bankerId,
-                                                  );
-                                                  // Build CrmProspect from response data
-                                                  final avatarInitials = initials.isEmpty ? '?' : initials;
-                                                  final newProspect = CrmProspect(
-                                                    id: prospectId,
-                                                    name: displayName,
-                                                    email: email,
-                                                    sector: industry.isNotEmpty ? industry : 'Technology',
-                                                    stage: (() {
-                                                      final bucket = p['stage_bucket'] as String? ?? '';
-                                                      if (bucket == 'pre_seed') return 'Pre-seed';
-                                                      if (bucket == 'seed') return 'Seed';
-                                                      if (bucket == 'early_stage') return 'Series A';
-                                                      if (bucket == 'growth_stage') return 'Series B';
-                                                      return 'Seed';
-                                                    })(),
-                                                    status: 'In conversation',
-                                                    profileProgress: 0.5,
-                                                    docsReceivedText: '0/2 received',
-                                                    docsReceivedCount: 0,
-                                                    docsTotalCount: 2,
-                                                    materialsReadText: '—',
-                                                    materialsReadSub: '',
-                                                    lastActive: 'Today',
-                                                    avatarText: avatarInitials,
-                                                    avatarBg: BankerColors.blueSoft,
-                                                    avatarFg: BankerColors.blue,
-                                                    docs: [],
-                                                    education: [],
-                                                    activity: [
-                                                      CrmActivity(
-                                                        icon: Icons.person_add_rounded,
-                                                        iconBg: BankerColors.blueSoft,
-                                                        iconColor: BankerColors.blue,
-                                                        text: 'Prospect assigned to ${activeBanker.name ?? activeBanker.email}',
-                                                        time: 'Today',
-                                                      ),
-                                                    ],
-                                                    notes: '',
-                                                    bankerId: activeBanker.bankerId,
-                                                    founderName: fullName.isNotEmpty ? fullName : displayName,
-                                                    stageBucket: p['stage_bucket'] as String? ?? 'seed',
-                                                  );
-                                                  ref.read(bankerProspectsProvider.notifier).addProspect(newProspect);
-                                                  // Remove from unassigned list
-                                                  setModalState(() {
-                                                    _unassigned.removeWhere((item) => item['prospect_id'] == prospectId);
-                                                    _assigning.remove(prospectId);
-                                                  });
-                                                } catch (e) {
-                                                  setModalState(() => _assigning[prospectId] = false);
-                                                  ScaffoldMessenger.of(dialogContext).showSnackBar(
-                                                    SnackBar(content: Text('Failed to assign prospect: $e')),
-                                                  );
-                                                }
-                                              },
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: BankerColors.navy,
-                                                foregroundColor: Colors.white,
-                                                elevation: 0,
-                                                padding: EdgeInsets.zero,
-                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                                ),
                                               ),
-                                              child: isAssigning
-                                                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                                  : const Text('Assign', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                                            ),
+                                              const SizedBox(width: 10),
+                                              // Name + subtitle
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      displayName,
+                                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: BankerColors.navy),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                    if (subtitle.isNotEmpty)
+                                                      Text(
+                                                        subtitle,
+                                                        style: const TextStyle(fontSize: 11, color: BankerColors.muted),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                  ],
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              // Assign button
+                                              SizedBox(
+                                                width: 70,
+                                                height: 30,
+                                                child: ElevatedButton(
+                                                  onPressed: isAssigning ? null : () => _handleAssign(prospectId, displayName, email, industry, initials, p),
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor: BankerColors.navy,
+                                                    foregroundColor: Colors.white,
+                                                    elevation: 0,
+                                                    padding: EdgeInsets.zero,
+                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                                  ),
+                                                  child: isAssigning
+                                                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                                      : const Text('Assign', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                        ],
+                                        ),
                                       ),
                                     );
                                   },
@@ -5283,6 +5572,328 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                         onPressed: () => Navigator.pop(dialogContext),
                         child: const Text('Close', style: TextStyle(color: BankerColors.muted)),
                       ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _unassignProspect(CrmProspect prospect) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Unassign Prospect?'),
+        content: Text('Are you sure you want to unassign ${prospect.name}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: BankerColors.muted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: BankerColors.navy,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Unassign'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await ConversationService().assignProspectToBanker(prospect.id, null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Successfully unassigned ${prospect.name}.')),
+      );
+      ref.read(bankerProspectsProvider.notifier).loadProspects();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to unassign: $e')),
+      );
+    }
+  }
+
+  void _showReassignProspectDialog(CrmProspect prospect) {
+    final bankers = ref.read(bankersProvider).value ?? [];
+    if (bankers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No bankers available to assign.')),
+      );
+      return;
+    }
+
+    final aiSuggestedIndex = prospect.id.hashCode.abs() % bankers.length;
+    final aiSuggestedBanker = bankers[aiSuggestedIndex];
+
+    Banker? selectedBanker;
+    // Find who the banker is currently assigned to (if any)
+    for (final b in bankers) {
+      if (b.bankerId == prospect.bankerId) {
+        selectedBanker = b;
+        break;
+      }
+    }
+
+    String _search = '';
+    bool isSaving = false;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final filteredBankers = bankers.where((b) {
+              final name = (b.name ?? '').toLowerCase();
+              final email = b.email.toLowerCase();
+              final q = _search.toLowerCase();
+              return name.contains(q) || email.contains(q);
+            }).toList();
+
+            final isAiSuggested = selectedBanker?.bankerId == aiSuggestedBanker.bankerId;
+            final buttonText = isAiSuggested ? 'Reassign Prospect' : 'Override Match Recommendations';
+
+            return Dialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Container(
+                width: 520,
+                constraints: const BoxConstraints(maxHeight: 600),
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Header
+                    Row(
+                      children: [
+                        const Icon(Icons.person_add_rounded, color: BankerColors.navy, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Reassign: ${prospect.name}',
+                            style: const TextStyle(
+                              fontFamily: 'DM Serif Display',
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: BankerColors.navy,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 18, color: BankerColors.muted),
+                          onPressed: () => Navigator.pop(dialogContext),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Select a banker to assign to this prospect.',
+                      style: TextStyle(color: BankerColors.muted, fontSize: 13),
+                    ),
+                    const SizedBox(height: 16),
+                    // Search bar
+                    TextField(
+                      onChanged: (val) => setModalState(() => _search = val),
+                      style: const TextStyle(fontSize: 12),
+                      decoration: InputDecoration(
+                        hintText: 'Search bankers by name or email...',
+                        prefixIcon: const Icon(Icons.search, size: 16, color: BankerColors.muted),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: BankerColors.line)),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: BankerColors.line)),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Column Headers
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFF9F9FB),
+                        border: Border(bottom: BorderSide(color: BankerColors.line, width: 1)),
+                      ),
+                      child: Row(
+                        children: const [
+                          Expanded(flex: 3, child: Text('BANKER', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: BankerColors.muted2))),
+                          Expanded(flex: 2, child: Text('ROLE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: BankerColors.muted2))),
+                          Expanded(flex: 2, child: Text('AI SUGGESTED', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: BankerColors.muted2))),
+                        ],
+                      ),
+                    ),
+                    // List
+                    Expanded(
+                      child: filteredBankers.isEmpty
+                          ? const Center(child: Text('No bankers found.', style: TextStyle(color: BankerColors.muted)))
+                          : ListView.separated(
+                              itemCount: filteredBankers.length,
+                              separatorBuilder: (c, idx) => const Divider(height: 1, color: BankerColors.line),
+                              itemBuilder: (c, idx) {
+                                final b = filteredBankers[idx];
+                                final isSelected = selectedBanker?.bankerId == b.bankerId;
+                                final bIsSuggested = b.bankerId == aiSuggestedBanker.bankerId;
+                                final bInitials = b.name != null
+                                    ? b.name!.split(' ').map((e) => e.isNotEmpty ? e[0].toUpperCase() : '').take(2).join()
+                                    : 'B';
+
+                                return InkWell(
+                                  onTap: () => setModalState(() => selectedBanker = b),
+                                  child: Container(
+                                    color: isSelected ? const Color(0xFFF0F4F8) : Colors.transparent,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    child: Row(
+                                      children: [
+                                        // Banker Info
+                                        Expanded(
+                                          flex: 3,
+                                          child: Row(
+                                            children: [
+                                              Container(
+                                                width: 28,
+                                                height: 28,
+                                                decoration: BoxDecoration(
+                                                  color: isSelected ? BankerColors.navy : const Color(0xFFE2E8F0),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                alignment: Alignment.center,
+                                                child: Text(
+                                                  bInitials,
+                                                  style: TextStyle(
+                                                    color: isSelected ? Colors.white : BankerColors.ink,
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      b.name ?? b.email,
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                                        color: BankerColors.ink,
+                                                      ),
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                    if (b.name != null)
+                                                      Text(
+                                                        b.email,
+                                                        style: const TextStyle(fontSize: 10, color: BankerColors.muted2),
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        // Role
+                                        Expanded(
+                                          flex: 2,
+                                          child: Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: b.role == 'manager' ? const Color(0xFFFEF3C7) : const Color(0xFFF1F5F9),
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                b.role == 'manager' ? 'Team Lead' : (b.position ?? 'Associate'),
+                                                style: TextStyle(
+                                                  color: b.role == 'manager' ? const Color(0xFF92400E) : const Color(0xFF475569),
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        // AI Suggested
+                                        Expanded(
+                                          flex: 2,
+                                          child: Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: bIsSuggested
+                                                ? Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                    decoration: BoxDecoration(
+                                                      color: const Color(0xFFDCFCE7),
+                                                      borderRadius: BorderRadius.circular(12),
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: const [
+                                                        Icon(Icons.auto_awesome, color: Color(0xFF166534), size: 10),
+                                                        SizedBox(width: 4),
+                                                        Text(
+                                                          'AI Suggested',
+                                                          style: TextStyle(color: Color(0xFF166534), fontSize: 9, fontWeight: FontWeight.bold),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  )
+                                                : const Text('—', style: TextStyle(color: BankerColors.muted2, fontSize: 11)),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Action Buttons
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(dialogContext),
+                          child: const Text('Cancel', style: TextStyle(color: BankerColors.muted)),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton(
+                          onPressed: (selectedBanker == null || isSaving)
+                              ? null
+                              : () async {
+                                  setModalState(() => isSaving = true);
+                                  try {
+                                    await ConversationService().assignProspectToBanker(prospect.id, selectedBanker!.bankerId);
+                                    Navigator.pop(dialogContext);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Successfully reassigned ${prospect.name} to ${selectedBanker!.name ?? selectedBanker!.email}')),
+                                    );
+                                    ref.read(bankerProspectsProvider.notifier).loadProspects();
+                                  } catch (e) {
+                                    setModalState(() => isSaving = false);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Failed to reassign: $e')),
+                                    );
+                                  }
+                                },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isAiSuggested ? BankerColors.navy : const Color(0xFFD97706),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          child: isSaving
+                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              : Text(buttonText, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -5414,12 +6025,6 @@ class _BankerDetailPageState extends ConsumerState<BankerDetailPage> {
                   context.go('/');
                 }
               },
-            ),
-            NotificationsSection(
-              isBanker: true,
-              prospectName: prospect.name,
-              founderName: prospect.founderName,
-              bankerName: bankerName,
             ),
             Expanded(
               child: isMobile

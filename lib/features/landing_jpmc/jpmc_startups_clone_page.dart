@@ -413,7 +413,7 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
                                 ],
                               ),
                             
-                            // Get in touch action
+                            // Banker's Portal action
                             InkWell(
                               onTap: () => context.go('/banker'),
                               child: Container(
@@ -427,7 +427,7 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
                                 child: Row(
                                   children: const [
                                     Text(
-                                      'GET IN TOUCH',
+                                      "BANKER'S PORTAL",
                                       style: TextStyle(
                                         color: Colors.white,
                                         fontSize: 12,

@@ -311,12 +311,14 @@ class Banker {
   final String email;
   final String? name;
   final String? position;
+  final String? role;
 
   const Banker({
     required this.bankerId,
     required this.email,
     this.name,
     this.position,
+    this.role,
   });
 
   factory Banker.fromJson(Map<String, dynamic> json) {
@@ -325,6 +327,7 @@ class Banker {
       email: json['email'] as String,
       name: json['name'] as String?,
       position: json['position'] as String?,
+      role: json['role'] as String?,
     );
   }
 }
@@ -1072,7 +1075,7 @@ class ConversationService {
     return data as List;
   }
 
-  Future<void> assignProspectToBanker(String prospectId, String bankerId) async {
+  Future<void> assignProspectToBanker(String prospectId, String? bankerId) async {
     await _dio.post(
       '${ApiConfig.baseUrl}/conversations/prospect/$prospectId/assign-banker',
       data: {'banker_id': bankerId},

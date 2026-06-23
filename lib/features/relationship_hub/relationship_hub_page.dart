@@ -169,13 +169,19 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
       widget.dynamicVariables['userEmail']?.toString() ??
       '';
 
-  String get _bankerName =>
-      _prospect?.bankerName ??
-      'Sarah Chen';
+  String get _bankerName {
+    if (_prospect != null && _prospect!.bankerId == null) {
+      return 'No Banker Assigned';
+    }
+    return _prospect?.bankerName ?? 'Sarah Chen';
+  }
 
-  String get _bankerPosition =>
-      _prospect?.bankerPosition ??
-      'Innovation Banking';
+  String get _bankerPosition {
+    if (_prospect != null && _prospect!.bankerId == null) {
+      return 'Unassigned';
+    }
+    return _prospect?.bankerPosition ?? 'Innovation Banking';
+  }
 
 
   void _onMessageTap() {
@@ -341,6 +347,7 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
                             bankerPosition: _bankerPosition,
                             onMessageTap: _onMessageTap,
                             mode: widget.mode,
+                            onUnassignBanker: () => _hydrateProspect(),
                           ),
                         ),
                         SizedBox(
@@ -383,6 +390,7 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
                 bankerPosition: _bankerPosition,
                 onMessageTap: _onMessageTap,
                 mode: widget.mode,
+                onUnassignBanker: () => _hydrateProspect(),
               );
 
     final scaffold = Scaffold(
@@ -537,6 +545,48 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
   }
 }
 
+
+CrmProspect getProspectForNotification(NotificationItem item, List<CrmProspect> prospects) {
+  if (prospects.isEmpty) {
+    return CrmProspect(
+      id: 'default',
+      name: "123's",
+      email: '',
+      sector: 'Fintech',
+      stage: 'Seed',
+      status: 'In conversation',
+      profileProgress: 0.45,
+      docsReceivedText: '0/2 received',
+      docsReceivedCount: 0,
+      docsTotalCount: 2,
+      materialsReadText: '0 / 1',
+      materialsReadSub: '1 unread',
+      lastActive: 'Today',
+      avatarText: '1',
+      avatarBg: Colors.blue,
+      avatarFg: Colors.white,
+      founderName: 'Gil',
+      stageBucket: 'super_agent',
+      phoneNumber: '',
+      headcount: '',
+      incorporated: true,
+      priorities: const [],
+      docs: const [],
+      education: const [],
+      activity: const [],
+      notes: '',
+    );
+  }
+  int index = 0;
+  if (item.title == 'Meeting confirmed') {
+    index = 0;
+  } else if (item.title == 'Call summary available') {
+    index = 1;
+  } else if (item.title.contains('New guide') || item.title.contains('Sarah reviewed')) {
+    index = 2;
+  }
+  return prospects[index % prospects.length];
+}
 
 NotificationItem _localizeNotification(
   NotificationItem item,
@@ -717,6 +767,7 @@ class _NotificationsSection extends StatefulWidget {
   final bool isBanker;
   final String? prospectName;
   final String? founderName;
+  final List<CrmProspect>? prospectsList;
 
   const _NotificationsSection({
     required this.bankerName,
@@ -724,6 +775,7 @@ class _NotificationsSection extends StatefulWidget {
     this.isBanker = false,
     this.prospectName,
     this.founderName,
+    this.prospectsList,
   });
 
   @override
@@ -771,15 +823,24 @@ class _NotificationsSectionState extends State<_NotificationsSection> {
 
   @override
   Widget build(BuildContext context) {
-    final activeItems = _notifService.activeHubNotifications.map((item) {
-      return _localizeNotification(
+    final activeItems = <NotificationItem>[];
+    for (int i = 0; i < _notifService.activeHubNotifications.length; i++) {
+      final item = _notifService.activeHubNotifications[i];
+      String? pName = widget.prospectName;
+      String? fName = widget.founderName;
+      if (widget.prospectsList != null) {
+        final assigned = getProspectForNotification(item, widget.prospectsList!);
+        pName = assigned.name;
+        fName = assigned.founderName;
+      }
+      activeItems.add(_localizeNotification(
         item,
         widget.bankerName,
         isBanker: widget.isBanker,
-        prospectName: widget.prospectName,
-        founderName: widget.founderName,
-      );
-    }).toList();
+        prospectName: pName,
+        founderName: fName,
+      ));
+    }
     final isMobile = MediaQuery.of(context).size.width < 768;
     if (activeItems.isEmpty) {
       return const SizedBox.shrink();
@@ -890,6 +951,7 @@ class _HubMainColumn extends StatefulWidget {
   final VoidCallback onMessageTap;
   final List<ProductPublic> products;
   final String? mode;
+  final VoidCallback? onUnassignBanker;
 
   const _HubMainColumn({
     required this.companyName,
@@ -907,6 +969,7 @@ class _HubMainColumn extends StatefulWidget {
     this.onTapProduct,
     this.onTapLearning,
     this.mode,
+    this.onUnassignBanker,
   });
 
   final void Function(BuildContext context, String title)? onTapLearning;
@@ -976,6 +1039,48 @@ class _HubMainColumnState extends State<_HubMainColumn> {
       setState(() {
         _scheduledCallDate = picked;
       });
+    }
+  }
+
+  void _unassignBanker() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Unsign Banker?'),
+        content: Text('Are you sure you want to unsign your banker, ${widget.bankerName}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Unsign'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final pid = widget.prospectId;
+        if (pid != null) {
+          await ConversationService().assignProspectToBanker(pid, null);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Banker unsigned successfully')),
+            );
+          }
+          widget.onUnassignBanker?.call();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to unsign banker: $e')),
+          );
+        }
+      }
     }
   }
 
@@ -1222,6 +1327,25 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                                         ],
                                       ),
                                     ),
+                                    if (widget.bankerName != 'No Banker Assigned' && widget.mode != 'banker')
+                                      PopupMenuButton<String>(
+                                        icon: const Icon(Icons.more_vert_rounded, color: Colors.grey, size: 20),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                        color: Colors.white,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                        onSelected: (val) {
+                                          if (val == 'unsign') {
+                                            _unassignBanker();
+                                          }
+                                        },
+                                        itemBuilder: (context) => [
+                                          const PopupMenuItem(
+                                            value: 'unsign',
+                                            child: Text('Unsign Banker', style: TextStyle(fontSize: 12, color: Colors.red)),
+                                          ),
+                                        ],
+                                      ),
                                   ],
                                 ),
                                 const SizedBox(height: 14),
@@ -1413,6 +1537,25 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                                             ],
                                           ),
                                         ),
+                                        if (widget.bankerName != 'No Banker Assigned' && widget.mode != 'banker')
+                                          PopupMenuButton<String>(
+                                            icon: const Icon(Icons.more_vert_rounded, color: Colors.grey, size: 20),
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
+                                            color: Colors.white,
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                            onSelected: (val) {
+                                              if (val == 'unsign') {
+                                                _unassignBanker();
+                                              }
+                                            },
+                                            itemBuilder: (context) => [
+                                              const PopupMenuItem(
+                                                value: 'unsign',
+                                                child: Text('Unsign Banker', style: TextStyle(fontSize: 12, color: Colors.red)),
+                                              ),
+                                            ],
+                                          ),
                                       ],
                                     ),
                                     const SizedBox(height: 14),
@@ -6557,15 +6700,17 @@ class NotificationsSection extends StatelessWidget {
   final bool isBanker;
   final String? prospectName;
   final String? founderName;
+  final List<CrmProspect>? prospectsList;
 
   const NotificationsSection({
-    super.key,
+    key,
     this.bankerName = 'Sarah Chen',
     this.bankerPosition = 'Innovation Banking',
     this.isBanker = false,
     this.prospectName,
     this.founderName,
-  });
+    this.prospectsList,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -6575,6 +6720,7 @@ class NotificationsSection extends StatelessWidget {
       isBanker: isBanker,
       prospectName: prospectName,
       founderName: founderName,
+      prospectsList: prospectsList,
     );
   }
 }

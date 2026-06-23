@@ -559,14 +559,13 @@ class HubNavBar extends StatelessWidget {
                                     fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                                   ),
                                 ),
-                                if (b.position != null)
-                                  Text(
-                                    b.position!,
-                                    style: TextStyle(
-                                      color: Colors.white.withOpacity(0.5),
-                                      fontSize: 10,
-                                    ),
+                                Text(
+                                  b.role == 'manager' ? 'Team Lead (Manager)' : (b.position ?? ''),
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.5),
+                                    fontSize: 10,
                                   ),
+                                ),
                               ],
                             ),
                           ),
