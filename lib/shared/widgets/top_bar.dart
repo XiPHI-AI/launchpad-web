@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../theme/app_theme.dart';
+import '../../core/branding/branding_provider.dart';
 
 /// Top application bar shown across all shell pages.
 /// Height: 64 px (implements PreferredSizeWidget).
 ///
 /// Left  : ⚡ LaunchPad wordmark
 /// Right : notification bell (placeholder) + profile icon + "Sign In" outlined button
-class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
+class AppTopBar extends ConsumerWidget implements PreferredSizeWidget {
   /// Called when the user taps "Sign In" in the top bar.
   final VoidCallback onSignIn;
 
@@ -32,7 +34,9 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
   Size get preferredSize => const Size.fromHeight(70);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final branding = ref.watch(brandingProvider);
+    final isMyBanker = branding == BrandingMode.myBanker;
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 768;
     final isDesktop = screenWidth >= 1024;
@@ -53,10 +57,10 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
               Navigator.of(context, rootNavigator: true).popUntil((route) => route.isFirst);
               context.go('/');
             },
-            child: const Text(
-              'J.P.Morgan',
+            child: Text(
+              isMyBanker ? 'My Banker' : 'J.P.Morgan',
               style: TextStyle(
-                fontSize: 26,
+                fontSize: isMyBanker ? 22 : 26,
                 color: AppThemeTokens.brandInk,
                 letterSpacing: 1.2,
                 fontWeight: FontWeight.bold,

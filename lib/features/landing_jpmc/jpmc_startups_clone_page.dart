@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/conversation_service.dart';
 import '../../shared/widgets/app_shell.dart';
 import '../../shared/widgets/hub_nav_bar.dart';
@@ -7,8 +8,9 @@ import '../../theme/app_theme.dart';
 import '../../services/prospect_storage.dart';
 import '../../features/relationship_hub/relationship_hub_page.dart';
 import '../../shared/widgets/prospect_id_provider.dart';
+import '../../core/branding/branding_provider.dart';
 
-class JpmcStartupsClonePage extends StatefulWidget {
+class JpmcStartupsClonePage extends ConsumerStatefulWidget {
   final String? invitationCode;
   final String? returnProspectId;
 
@@ -19,7 +21,7 @@ class JpmcStartupsClonePage extends StatefulWidget {
   });
 
   @override
-  State<JpmcStartupsClonePage> createState() => _JpmcStartupsClonePageState();
+  ConsumerState<JpmcStartupsClonePage> createState() => _JpmcStartupsClonePageState();
 }
 
 class _StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
@@ -44,8 +46,12 @@ class _StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
   }
 }
 
-class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
+class _JpmcStartupsClonePageState extends ConsumerState<JpmcStartupsClonePage> {
   final _service = ConversationService();
+  String _b(String text) {
+    final branding = ref.watch(brandingProvider);
+    return cleanBrandingText(text, branding);
+  }
   bool _isLoading = false;
   String? _errorMessage;
   ProspectInitResult? _resolvedProspect;
@@ -1016,7 +1022,7 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
                                   const SizedBox(height: 22),
                                   Text('Meet Prospectz.ai — your startup intelligence partner', style: TextStyle(fontSize: isMobile ? 28 : 40, color: Colors.white, height: 1.18)),
                                   const SizedBox(height: 18),
-                                  Text('We\'ve partnered with Prospectz.ai to give J.P. Morgan startup clients access to a personalised AI advisor that understands your business and maps your needs to exactly the right financial products — no forms, no waiting.', style: TextStyle(fontSize: 16, color: Colors.white.withOpacity(0.72), height: 1.68)),
+                                  Text(_b('We\'ve partnered with Prospectz.ai to give J.P. Morgan startup clients access to a personalised AI advisor that understands your business and maps your needs to exactly the right financial products — no forms, no waiting.'), style: TextStyle(fontSize: 16, color: Colors.white.withOpacity(0.72), height: 1.68)),
                                   const SizedBox(height: 28),
                                   _lpBullet('Voice + text AI that adapts to your startup\'s stage and goals'),
                                   _lpBullet('Instant matching to relevant J.P. Morgan products and services'),
@@ -1067,9 +1073,9 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
                                           child: const Text('Get Started with Prospectz.ai', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                                         ),
                                         const SizedBox(height: 12),
-                                        Text('Free for J.P. Morgan startup clients', style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.45))),
+                                        Text(_b('Free for J.P. Morgan startup clients'), style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.45))),
                                         const SizedBox(height: 20),
-                                        Text('You\'ll be redirected to Prospectz.ai with your J.P. Morgan partnership credentials pre-applied.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.35), height: 1.5)),
+                                        Text(_b('You\'ll be redirected to Prospectz.ai with your J.P. Morgan partnership credentials pre-applied.'), textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.35), height: 1.5)),
                                       ],
                                     ),
                                   ),
@@ -1102,7 +1108,7 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
                                         const SizedBox(height: 22),
                                         Text('Meet Prospectz.ai — your startup intelligence partner', style: TextStyle(fontSize: 40, color: Colors.white, height: 1.18)),
                                         const SizedBox(height: 18),
-                                        Text('We\'ve partnered with Prospectz.ai to give J.P. Morgan startup clients access to a personalised AI advisor that understands your business and maps your needs to exactly the right financial products — no forms, no waiting.', style: TextStyle(fontSize: 16, color: Colors.white.withOpacity(0.72), height: 1.68)),
+                                        Text(_b('We\'ve partnered with Prospectz.ai to give J.P. Morgan startup clients access to a personalised AI advisor that understands your business and maps your needs to exactly the right financial products — no forms, no waiting.'), style: TextStyle(fontSize: 16, color: Colors.white.withOpacity(0.72), height: 1.68)),
                                         const SizedBox(height: 28),
                                         _lpBullet('Voice + text AI that adapts to your startup\'s stage and goals'),
                                         _lpBullet('Instant matching to relevant J.P. Morgan products and services'),
@@ -1158,9 +1164,9 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
                                             child: const Text('Get Started with Prospectz.ai', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                                           ),
                                           const SizedBox(height: 12),
-                                          Text('Free for J.P. Morgan startup clients', style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.45))),
-                                          const SizedBox(height: 20),
-                                          Text('You\'ll be redirected to Prospectz.ai with your J.P. Morgan partnership credentials pre-applied.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.35), height: 1.5)),
+                                           Text(_b('Free for J.P. Morgan startup clients'), style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.45))),
+                                           const SizedBox(height: 20),
+                                           Text(_b('You\'ll be redirected to Prospectz.ai with your J.P. Morgan partnership credentials pre-applied.'), textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.35), height: 1.5)),
                                         ],
                                       ),
                                     ),
@@ -1218,9 +1224,9 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
                                 Navigator.of(context, rootNavigator: true).popUntil((route) => route.isFirst);
                                 context.go('/');
                               },
-                              child: const Text(
-                                'J.P.Morgan',
-                                style: TextStyle(
+                              child: Text(
+                                _b('J.P.Morgan'),
+                                style: const TextStyle(
                                   fontSize: 32,
                                   color: jpmcBrown,
                                   letterSpacing: 1.2,
@@ -1296,9 +1302,9 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
                                       Navigator.of(context, rootNavigator: true).popUntil((route) => route.isFirst);
                                       context.go('/');
                                     },
-                                    child: const Text(
-                                      'J.P.Morgan',
-                                      style: TextStyle(
+                                    child: Text(
+                                      _b('J.P.Morgan'),
+                                      style: const TextStyle(
                                         fontSize: 32,
                                         color: jpmcBrown,
                                         letterSpacing: 1.2,
@@ -1345,7 +1351,7 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
                           Padding(
                             padding: EdgeInsets.only(top: isMobile ? 24 : 0),
                             child: Text(
-                              '© 2026 JPMorgan Chase & Co.\nAll rights reserved.',
+                              _b('© 2026 JPMorgan Chase & Co.\nAll rights reserved.'),
                               style: TextStyle(fontSize: 12, color: Colors.grey.shade500, height: 1.5),
                               textAlign: isMobile ? TextAlign.left : TextAlign.right,
                             ),
@@ -1551,7 +1557,7 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
         children: [
           const Text('✓', style: TextStyle(color: Color(0xFF86EFAC), fontWeight: FontWeight.bold)),
           const SizedBox(width: 8),
-          Expanded(child: Text(text, style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.82))))
+          Expanded(child: Text(_b(text), style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.82))))
         ],
       )
     );
@@ -1561,7 +1567,7 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
       decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), border: Border.all(color: Colors.white.withOpacity(0.2)), borderRadius: BorderRadius.circular(4)),
-      child: Text(text, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white.withOpacity(0.7))),
+      child: Text(_b(text), style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white.withOpacity(0.7))),
     );
   }
 
@@ -1569,11 +1575,11 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: Colors.white.withOpacity(0.38))),
+        Text(_b(title), style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: Colors.white.withOpacity(0.38))),
         const SizedBox(height: 16),
         ...links.map((link) => Padding(
           padding: const EdgeInsets.only(bottom: 9),
-          child: Text(link, style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.58))),
+          child: Text(_b(link), style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.58))),
         )),
       ]
     );
@@ -1590,7 +1596,7 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
         children: [
           Expanded(
             child: Text(
-              text,
+              _b(text),
               style: TextStyle(
                 fontSize: 18,
                 color: Colors.grey.shade700,
@@ -1608,11 +1614,11 @@ class _JpmcStartupsClonePageState extends State<JpmcStartupsClonePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5, color: Color(0xFF4A5568))),
+        Text(_b(title), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5, color: Color(0xFF4A5568))),
         const SizedBox(height: 16),
         ...links.map((link) => Padding(
           padding: const EdgeInsets.only(bottom: 12),
-          child: Text(link, style: TextStyle(fontSize: 13, color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
+          child: Text(_b(link), style: TextStyle(fontSize: 13, color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
         )),
       ]
     );

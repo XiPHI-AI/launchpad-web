@@ -31,6 +31,7 @@ class _LaunchPadAppState extends ConsumerState<LaunchPadApp> {
     _router = createRouter(
       refreshNotifier: _routerNotifier,
       isAuthenticated: () => ref.read(isAuthenticatedProvider),
+      ref: ref,
     );
     // Restore session from secure storage silently on first launch
     Future.microtask(

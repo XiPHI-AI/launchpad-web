@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../theme/app_theme.dart';
 import 'package:go_router/go_router.dart';
 import 'notification_icon.dart';
 import 'prospect_id_provider.dart';
 import '../../services/conversation_service.dart';
+import '../../core/branding/branding_provider.dart';
 
 class HubNavBar extends StatelessWidget {
   final String companyName;
@@ -420,32 +422,56 @@ class HubNavBar extends StatelessWidget {
             },
             child: MouseRegion(
               cursor: SystemMouseCursors.click,
-              child: RichText(
-                text: TextSpan(
-                  style: const TextStyle(
-                    fontFamily: AppThemeTokens.fontFamily,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                  children: [
-                    const TextSpan(text: 'JPMorgan '),
-                    const TextSpan(
-                      text: 'Innovation Economy',
-                      style: TextStyle(color: AppThemeTokens.goldAccent),
-                    ),
-                    if (isBankerView)
-                      const TextSpan(
-                        text: '  ·  Banker view',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF8D8578),
-                          fontStyle: FontStyle.italic,
-                          fontWeight: FontWeight.normal,
-                        ),
+              child: Consumer(
+                builder: (context, ref, _) {
+                  final branding = ref.watch(brandingProvider);
+                  final isMyBanker = branding == BrandingMode.myBanker;
+                  return RichText(
+                    text: TextSpan(
+                      style: const TextStyle(
+                        fontFamily: AppThemeTokens.fontFamily,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
                       ),
-                  ],
-                ),
+                      children: isMyBanker
+                          ? [
+                              const TextSpan(text: 'My '),
+                              const TextSpan(
+                                text: 'Banker',
+                                style: TextStyle(color: AppThemeTokens.goldAccent),
+                              ),
+                              if (isBankerView)
+                                const TextSpan(
+                                  text: '  ·  Banker view',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFF8D8578),
+                                    fontStyle: FontStyle.italic,
+                                    fontWeight: FontWeight.normal,
+                                  ),
+                                ),
+                            ]
+                          : [
+                              const TextSpan(text: 'JPMorgan '),
+                              const TextSpan(
+                                text: 'Innovation Economy',
+                                style: TextStyle(color: AppThemeTokens.goldAccent),
+                              ),
+                              if (isBankerView)
+                                const TextSpan(
+                                  text: '  ·  Banker view',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFF8D8578),
+                                    fontStyle: FontStyle.italic,
+                                    fontWeight: FontWeight.normal,
+                                  ),
+                                ),
+                            ],
+                    ),
+                  );
+                },
               ),
             ),
           ),

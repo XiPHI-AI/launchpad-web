@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/conversation_service.dart';
 import 'voice_page.dart';
 import 'manual_form_page.dart';
@@ -6,8 +7,9 @@ import '../../shared/widgets/app_shell.dart';
 import '../../shared/widgets/no_transition_page_route.dart';
 import '../../theme/app_theme.dart';
 import '../../shared/widgets/prospect_id_provider.dart';
+import '../../core/branding/branding_provider.dart';
 
-class ModeSelectionPage extends StatefulWidget {
+class ModeSelectionPage extends ConsumerStatefulWidget {
   final String stageBucket;
   final String? prospectId;
   final Map<String, dynamic> dynamicVariables;
@@ -24,10 +26,10 @@ class ModeSelectionPage extends StatefulWidget {
   });
 
   @override
-  State<ModeSelectionPage> createState() => _ModeSelectionPageState();
+  ConsumerState<ModeSelectionPage> createState() => _ModeSelectionPageState();
 }
 
-class _ModeSelectionPageState extends State<ModeSelectionPage>
+class _ModeSelectionPageState extends ConsumerState<ModeSelectionPage>
     with SingleTickerProviderStateMixin {
   bool _isFetchingToken = false;
   bool _isVoiceTriggerHovered = false;
@@ -442,7 +444,7 @@ class _ModeSelectionPageState extends State<ModeSelectionPage>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Nova — Your JPMC AI Advisor',
+                  cleanBrandingText('Nova — Your JPMC AI Advisor', ref.watch(brandingProvider)),
                   style: const TextStyle(
                     color: AppThemeTokens.goldAccent,
                     fontSize: 20,

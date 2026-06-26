@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/conversation_service.dart';
 import '../../shared/widgets/app_shell.dart';
+import '../../core/branding/branding_provider.dart';
 
 const _kSuperAgentBucket = 'super_agent';
 
-class StageSelectorPage extends StatefulWidget {
+class StageSelectorPage extends ConsumerStatefulWidget {
   final String? invitationCode;
   final String? returnProspectId;
 
@@ -15,10 +17,10 @@ class StageSelectorPage extends StatefulWidget {
   });
 
   @override
-  State<StageSelectorPage> createState() => _StageSelectorPageState();
+  ConsumerState<StageSelectorPage> createState() => _StageSelectorPageState();
 }
 
-class _StageSelectorPageState extends State<StageSelectorPage> {
+class _StageSelectorPageState extends ConsumerState<StageSelectorPage> {
   final _service = ConversationService();
   bool _loading = false;
   String? _errorMessage;
@@ -106,6 +108,7 @@ class _StageSelectorPageState extends State<StageSelectorPage> {
 
   @override
   Widget build(BuildContext context) {
+    final branding = ref.watch(brandingProvider);
     if (_resolvedProspect != null) {
       final resolved = _resolvedProspect!;
       return AppShell(
@@ -155,7 +158,7 @@ class _StageSelectorPageState extends State<StageSelectorPage> {
                     ),
                     const SizedBox(width: 12),
                     Text(
-                      'JPMC Prospectz.ai',
+                      cleanBrandingText('JPMC Prospectz.ai', branding),
                       style: textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                         color: colorScheme.onSurface,
@@ -177,8 +180,11 @@ class _StageSelectorPageState extends State<StageSelectorPage> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Your JPMC Innovation Economy AI advisor.\n'
-                  'I\'ll learn about your startup and recommend the right banking solutions for your stage.',
+                  cleanBrandingText(
+                    'Your JPMC Innovation Economy AI advisor.\n'
+                    'I\'ll learn about your startup and recommend the right banking solutions for your stage.',
+                    branding,
+                  ),
                   style: textTheme.bodyLarge?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                     height: 1.5,

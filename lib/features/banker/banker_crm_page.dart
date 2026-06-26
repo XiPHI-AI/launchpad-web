@@ -8,6 +8,7 @@ import '../../services/prospect_storage.dart';
 import '../../services/conversation_service.dart';
 import '../../services/notification_service.dart';
 import '../relationship_hub/relationship_hub_page.dart';
+import '../../core/branding/branding_provider.dart';
 
 // --- COLOR PALETTE FROM HTML ---
 class BankerColors {
@@ -957,6 +958,7 @@ class BankerDetailPanel extends ConsumerStatefulWidget {
 class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
   String _activeTab = 'assign';
   final TextEditingController _notesController = TextEditingController();
+  final NotificationService _notifService = NotificationService();
   List<ProductPublic> _products = [];
   bool _loadingProducts = false;
   List<String> _suggestedQuestions = [];
@@ -1004,11 +1006,16 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
   @override
   void initState() {
     super.initState();
+    _notifService.addListener(_onNotifUpdate);
     _fetchProducts();
     _fetchSuggestedQuestions();
     _fetchCheckpoints();
     _fetchDocuments();
     _fetchFullProfile();
+  }
+
+  void _onNotifUpdate() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -1116,6 +1123,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
 
   @override
   void dispose() {
+    _notifService.removeListener(_onNotifUpdate);
     _notesController.dispose();
     super.dispose();
   }
@@ -2986,15 +2994,99 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
         .join(' ');
   }
 
+  /// Returns the prospect slot for a given notification, using the explicit
+  /// [prospectSlot] field on the item (reliable with real API data).
+  int _notificationIndexForItem(NotificationItem item) {
+    return item.prospectSlot;
+  }
+
   Widget _buildNextStepsTab(CrmProspect prospect) {
     final docsTotal = prospect.docsTotalCount;
     final docsReceived = prospect.docsReceivedCount;
     final materialsReadText = prospect.materialsReadText;
     final materialsReadSub = prospect.materialsReadSub;
+    final prospects = ref.read(bankerProspectsProvider);
+    final activeBanker = ref.read(activeBankerProvider);
+    final bankerName = activeBanker?.name ?? activeBanker?.email ?? 'Your Banker';
+
+    // Collect notifications assigned to this prospect.
+    // getProspectForNotification maps by list index (0→Meeting, 1→CallSummary, 2→NewGuide).
+    // We compare the prospect's position in the list rather than its UUID so this works
+    // with real API data where UUIDs won't match the mock service's fixed indices.
+    final prospectIndex = prospects.isEmpty ? -1 : prospects.indexWhere((p) => p.id == prospect.id);
+    final List<(int, NotificationItem)> prospectNotifications = [];
+    if (prospectIndex >= 0) {
+      for (int i = 0; i < _notifService.activeHubNotifications.length; i++) {
+        final item = _notifService.activeHubNotifications[i];
+        // Determine which index this notification is assigned to
+        final assignedIndex = prospects.isEmpty
+            ? 0
+            : _notificationIndexForItem(item) % prospects.length;
+        if (assignedIndex == prospectIndex) {
+          final localized = localizeNotification(
+            item,
+            bankerName,
+            isBanker: true,
+            prospectName: prospect.name,
+            founderName: prospect.founderName,
+          );
+          prospectNotifications.add((i, localized));
+        }
+      }
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // ── Prospect Notifications ───────────────────────────────────────────
+        if (prospectNotifications.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Text(
+              'NOTIFICATIONS',
+              style: TextStyle(
+                fontSize: 10,
+                letterSpacing: 1.2,
+                color: BankerColors.muted2,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          ...prospectNotifications.map((entry) {
+            final originalIndex = entry.$1;
+            final item = entry.$2;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: NotificationCard(
+                icon: item.icon,
+                iconColor: item.iconColor,
+                iconBg: item.bg,
+                title: item.title,
+                message: item.message,
+                footer: item.footer,
+                onTap: () {
+                  showDialog(
+                    context: context,
+                    barrierColor: Colors.black.withOpacity(0.5),
+                    builder: (dialogContext) {
+                      return NotificationDetailModal(
+                        item: item,
+                        onMarkAsRead: () {
+                          Navigator.of(dialogContext).pop();
+                          _notifService.markAsRead(originalIndex);
+                        },
+                      );
+                    },
+                  );
+                },
+                onMarkAsRead: () => _notifService.markAsRead(originalIndex),
+              ),
+            );
+          }),
+          const SizedBox(height: 8),
+          Container(height: 1, color: BankerColors.line2),
+          const SizedBox(height: 16),
+        ],
         // Profile details at top
         Container(
           padding: const EdgeInsets.all(16),
@@ -3346,9 +3438,9 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
-          'Recommended J.P. Morgan products matching stage & sector fit:',
-          style: TextStyle(fontSize: 11, color: BankerColors.muted2),
+        Text(
+          cleanBrandingText('Recommended J.P. Morgan products matching stage & sector fit:', ref.watch(brandingProvider)),
+          style: const TextStyle(fontSize: 11, color: BankerColors.muted2),
         ),
         const SizedBox(height: 12),
         Wrap(
@@ -3366,7 +3458,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
                 iconColor: tint,
                 title: product.name,
                 description: product.shortDescription ?? product.description,
-                cta: 'By ${product.provider?.companyName ?? 'J.P. Morgan'}',
+                cta: 'By ${cleanBrandingText(product.provider?.companyName ?? 'J.P. Morgan', ref.watch(brandingProvider))}',
                 websiteUrl: (product.signupUrl != null && product.signupUrl!.isNotEmpty)
                     ? product.signupUrl
                     : product.provider?.websiteUrl,
@@ -3417,12 +3509,12 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
       );
     }
 
-    final questions = _suggestedQuestions.isNotEmpty ? _suggestedQuestions : [
+    final questions = (_suggestedQuestions.isNotEmpty ? _suggestedQuestions : [
       'How can J.P. Morgan help us extend our runway given our current stage?',
       'What are the requirements and onboarding timelines for setting up multi-currency accounts or global banking at J.P. Morgan?',
       'How do your transaction fees and payment gateway integrations compare to standard processors we are using?',
       'What venture debt options are available for us to complement our upcoming fundraising rounds?',
-    ];
+    ]).map((q) => cleanBrandingText(q, ref.watch(brandingProvider))).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -4502,6 +4594,8 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
   }
 
   Widget _buildToolbar(bool isMobile) {
+    final activeBanker = ref.watch(activeBankerProvider);
+    final isManager = activeBanker?.role == 'manager';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       decoration: const BoxDecoration(
@@ -4581,17 +4675,18 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                 child: const Text('Export', style: TextStyle(fontSize: 11, color: BankerColors.ink, fontWeight: FontWeight.bold)),
               ),
               const SizedBox(width: 8),
-              ElevatedButton(
-                              onPressed: _showAssignProspectDialog,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: BankerColors.navy,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              if (isManager)
+                ElevatedButton(
+                                onPressed: _showAssignProspectDialog,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: BankerColors.navy,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: const Text('+ Assign Prospect', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                 ),
-                child: const Text('+ Assign Prospect', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-              ),
             ],
           ),
         ],
@@ -4705,9 +4800,11 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                                             ),
                                           ),
                                           if (() {
+                                            final pIdx = prospects.indexWhere((p) => p.id == prospect.id);
+                                            if (pIdx < 0 || prospects.isEmpty) return false;
                                             for (var item in _notifService.activeHubNotifications) {
-                                              final assigned = getProspectForNotification(item, prospects);
-                                              if (assigned.id == prospect.id) return true;
+                                              // Use prospectSlot for reliable matching
+                                              if (item.prospectSlot % prospects.length == pIdx) return true;
                                             }
                                             return false;
                                           }())

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/conversation_service.dart';
 import 'voice_page.dart';
 import 'mode_selection_page.dart';
@@ -10,6 +11,7 @@ import '../../shared/widgets/app_shell.dart';
 import '../../shared/widgets/no_transition_page_route.dart';
 import '../../theme/app_theme.dart';
 import '../../shared/widgets/prospect_id_provider.dart';
+import '../../core/branding/branding_provider.dart';
 
 class _StageContent {
   final String heading;
@@ -124,7 +126,7 @@ enum _EmailLookupAction {
   keepPrevious,
 }
 
-class ConversationIntroPage extends StatefulWidget {
+class ConversationIntroPage extends ConsumerStatefulWidget {
   final String stageBucket;
   final String? prospectId;
   final Map<String, dynamic> dynamicVariables;
@@ -147,10 +149,21 @@ class ConversationIntroPage extends StatefulWidget {
   });
 
   @override
-  State<ConversationIntroPage> createState() => _ConversationIntroPageState();
+  ConsumerState<ConversationIntroPage> createState() => _ConversationIntroPageState();
 }
 
-class _ConversationIntroPageState extends State<ConversationIntroPage> {
+class _ConversationIntroPageState extends ConsumerState<ConversationIntroPage> {
+  _StageContent getBrandedContent(BrandingMode mode, _StageContent origin) {
+    if (mode == BrandingMode.myBanker) {
+      return _StageContent(
+        heading: origin.heading.replaceAll('JPMC', 'My Banker'),
+        description: origin.description.replaceAll('JPMC', 'My Banker'),
+        topics: origin.topics.map((t) => t.replaceAll('JPMC', 'My Banker')).toList(),
+        duration: origin.duration,
+      );
+    }
+    return origin;
+  }
   final _formKey = GlobalKey<FormState>();
   final _service = ConversationService();
   bool _isPostIncorporated = false;
@@ -666,9 +679,12 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
                         style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppThemeTokens.brandInk),
                       ),
                       const SizedBox(height: 8),
-                      const Text(
-                        'This chat feature is designed specifically for JPMC Innovation Economy banking products. It is not available for servicing other JPMC lines of business or specific investment accounts. For non-IE inquiries, please contact your dedicated Relationship Manager or our Service Desk at (800) JPMC-HELP.',
-                        style: TextStyle(fontSize: 14, color: Color(0xFF4B5563), height: 1.5),
+                      Text(
+                        cleanBrandingText(
+                          'This chat feature is designed specifically for JPMC Innovation Economy banking products. It is not available for servicing other JPMC lines of business or specific investment accounts. For non-IE inquiries, please contact your dedicated Relationship Manager or our Service Desk at (800) JPMC-HELP.',
+                          ref.watch(brandingProvider),
+                        ),
+                        style: const TextStyle(fontSize: 14, color: Color(0xFF4B5563), height: 1.5),
                       ),
                       const SizedBox(height: 16),
                       const Text(
@@ -712,7 +728,8 @@ class _ConversationIntroPageState extends State<ConversationIntroPage> {
 
   @override
   Widget build(BuildContext context) {
-    final content = _stageContent[widget.stageBucket]!;
+    final branding = ref.watch(brandingProvider);
+    final content = getBrandedContent(branding, _stageContent[widget.stageBucket]!);
     final textTheme = Theme.of(context).textTheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     

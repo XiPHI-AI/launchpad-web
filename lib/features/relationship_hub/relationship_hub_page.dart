@@ -16,6 +16,7 @@ import '../../shared/widgets/prospect_id_provider.dart';
 import '../../services/prospect_storage.dart';
 import '../../shared/widgets/typewriter_reveal.dart';
 import '../banker/banker_crm_page.dart';
+import '../../core/branding/branding_provider.dart';
 
 class _GuideMessage {
   final bool isUser;
@@ -118,11 +119,12 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
     if (widget.prospectId == null) return;
     if (widget.mode == 'banker') {
       final String name = widget.prospectId ?? 'Aster';
+      final branding = ref.read(brandingProvider);
       setState(() {
         _prospect = ProspectInitResult(
           prospectId: widget.prospectId ?? 'aster',
           stageBucket: 'super_agent',
-          agentDisplayName: 'your JPMC AI Advisor',
+          agentDisplayName: cleanBrandingText('your JPMC AI Advisor', branding),
           conversationPhase: name.toLowerCase() == 'aster' ? 5 : 2,
           isReturning: true,
           email: '${widget.prospectId ?? "aster"}@example.com',
@@ -577,18 +579,11 @@ CrmProspect getProspectForNotification(NotificationItem item, List<CrmProspect> 
       notes: '',
     );
   }
-  int index = 0;
-  if (item.title == 'Meeting confirmed') {
-    index = 0;
-  } else if (item.title == 'Call summary available') {
-    index = 1;
-  } else if (item.title.contains('New guide') || item.title.contains('Sarah reviewed')) {
-    index = 2;
-  }
-  return prospects[index % prospects.length];
+  // Use prospectSlot directly — reliable with real API data.
+  return prospects[item.prospectSlot % prospects.length];
 }
 
-NotificationItem _localizeNotification(
+NotificationItem localizeNotification(
   NotificationItem item,
   String bankerName, {
   bool isBanker = false,
@@ -810,7 +805,7 @@ class _NotificationsSectionState extends State<_NotificationsSection> {
       context: context,
       barrierColor: Colors.black.withOpacity(0.5),
       builder: (dialogContext) {
-        return _NotificationDetailModal(
+        return NotificationDetailModal(
           item: item,
           onMarkAsRead: () {
             Navigator.of(dialogContext).pop();
@@ -823,9 +818,13 @@ class _NotificationsSectionState extends State<_NotificationsSection> {
 
   @override
   Widget build(BuildContext context) {
-    final activeItems = <NotificationItem>[];
+    // Build list of (originalIndex, localizedItem) pairs
+    final List<(int, NotificationItem)> activeIndexedItems = [];
     for (int i = 0; i < _notifService.activeHubNotifications.length; i++) {
       final item = _notifService.activeHubNotifications[i];
+      // In banker view, only show 'Meeting confirmed' in the top bar (one per prospect).
+      // Call summary and New guide appear only inside the prospect detail panel.
+      if (widget.isBanker && item.title != 'Meeting confirmed') continue;
       String? pName = widget.prospectName;
       String? fName = widget.founderName;
       if (widget.prospectsList != null) {
@@ -833,14 +832,16 @@ class _NotificationsSectionState extends State<_NotificationsSection> {
         pName = assigned.name;
         fName = assigned.founderName;
       }
-      activeItems.add(_localizeNotification(
+      activeIndexedItems.add((i, localizeNotification(
         item,
         widget.bankerName,
         isBanker: widget.isBanker,
         prospectName: pName,
         founderName: fName,
-      ));
+      )));
     }
+    final activeItems = activeIndexedItems.map((e) => e.$2).toList();
+    final activeIndices = activeIndexedItems.map((e) => e.$1).toList();
     final isMobile = MediaQuery.of(context).size.width < 768;
     if (activeItems.isEmpty) {
       return const SizedBox.shrink();
@@ -867,17 +868,18 @@ class _NotificationsSectionState extends State<_NotificationsSection> {
               ? Column(
                   children: List.generate(activeItems.length, (i) {
                     final item = activeItems[i];
+                    final originalIndex = activeIndices[i];
                     return Padding(
                       padding: EdgeInsets.only(bottom: i < activeItems.length - 1 ? 12 : 0),
-                      child: _NotificationCard(
+                      child: NotificationCard(
                         icon: item.icon,
                         iconColor: item.iconColor,
                         iconBg: item.bg,
                         title: item.title,
                         message: item.message,
                         footer: item.footer,
-                        onTap: () => _showNotificationDetail(context, item, i),
-                        onMarkAsRead: () => _dismissCard(i),
+                        onTap: () => _showNotificationDetail(context, item, originalIndex),
+                        onMarkAsRead: () => _dismissCard(originalIndex),
                       ),
                     );
                   }),
@@ -889,17 +891,18 @@ class _NotificationsSectionState extends State<_NotificationsSection> {
                       final List<Widget> activeCards = [];
                       for (int i = 0; i < activeItems.length; i++) {
                         final item = activeItems[i];
+                        final originalIndex = activeIndices[i];
                         activeCards.add(
                           Expanded(
-                            child: _NotificationCard(
+                            child: NotificationCard(
                               icon: item.icon,
                               iconColor: item.iconColor,
                               iconBg: item.bg,
                               title: item.title,
                               message: item.message,
                               footer: item.footer,
-                              onTap: () => _showNotificationDetail(context, item, i),
-                              onMarkAsRead: () => _dismissCard(i),
+                              onTap: () => _showNotificationDetail(context, item, originalIndex),
+                              onMarkAsRead: () => _dismissCard(originalIndex),
                             ),
                           ),
                         );
@@ -936,7 +939,7 @@ String _getInitials(String name) {
   return parts[0][0].toUpperCase();
 }
 
-class _HubMainColumn extends StatefulWidget {
+class _HubMainColumn extends ConsumerStatefulWidget {
   final String companyName;
   final String founderName;
   final String industry;
@@ -975,10 +978,10 @@ class _HubMainColumn extends StatefulWidget {
   final void Function(BuildContext context, String title)? onTapLearning;
 
   @override
-  State<_HubMainColumn> createState() => _HubMainColumnState();
+  ConsumerState<_HubMainColumn> createState() => _HubMainColumnState();
 }
 
-class _HubMainColumnState extends State<_HubMainColumn> {
+class _HubMainColumnState extends ConsumerState<_HubMainColumn> {
   bool _hasInteractedProducts = false;
   bool _hasInteractedLearning = false;
   bool _showAllProducts = false;
@@ -1722,7 +1725,7 @@ class _HubMainColumnState extends State<_HubMainColumn> {
                       iconColor: tint,
                       title: product.name,
                       description: product.shortDescription ?? product.description,
-                      cta: 'By ${product.provider?.companyName ?? 'J.P. Morgan'}',
+                      cta: 'By ${cleanBrandingText(product.provider?.companyName ?? 'J.P. Morgan', ref.watch(brandingProvider))}',
                       websiteUrl: (product.signupUrl != null && product.signupUrl!.isNotEmpty)
                           ? product.signupUrl
                           : product.provider?.websiteUrl,
@@ -3184,7 +3187,7 @@ class _GuideTypingBubble extends StatelessWidget {
   }
 }
 
-class _NotificationCard extends StatelessWidget {
+class NotificationCard extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
   final Color iconBg;
@@ -3194,7 +3197,7 @@ class _NotificationCard extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onMarkAsRead;
 
-  const _NotificationCard({
+  const NotificationCard({
     required this.icon,
     required this.iconColor,
     required this.iconBg,
@@ -3318,11 +3321,11 @@ class _NotificationCard extends StatelessWidget {
 
 // ─── Notification Detail Modal ────────────────────────────────────────────────
 
-class _NotificationDetailModal extends StatelessWidget {
+class NotificationDetailModal extends StatelessWidget {
   final NotificationItem item;
   final VoidCallback onMarkAsRead;
 
-  const _NotificationDetailModal({
+  const NotificationDetailModal({
     required this.item,
     required this.onMarkAsRead,
   });

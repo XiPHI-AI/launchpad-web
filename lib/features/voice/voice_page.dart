@@ -2,10 +2,12 @@ import 'dart:convert';
 import 'package:elevenlabs_agents/elevenlabs_agents.dart';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/api_config.dart';
 import '../../tools/client_tools.dart';
 import '../../services/conversation_service.dart';
 import '../../theme/app_theme.dart';
+import '../../core/branding/branding_provider.dart';
 import 'widgets/voice_bubble_row.dart';
 import 'widgets/voice_classification_panel.dart';
 import 'widgets/voice_header.dart';
@@ -62,7 +64,7 @@ String _sanitizeAgentMessage(String raw) {
 // ---------------------------------------------------------------------------
 // VoicePage
 // ---------------------------------------------------------------------------
-class VoicePage extends StatefulWidget {
+class VoicePage extends ConsumerStatefulWidget {
   final String conversationToken;
   final String stageBucket;
   final String? prospectId;
@@ -85,10 +87,10 @@ class VoicePage extends StatefulWidget {
   });
 
   @override
-  State<VoicePage> createState() => _VoicePageState();
+  ConsumerState<VoicePage> createState() => _VoicePageState();
 }
 
-class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMixin {
+class _VoicePageState extends ConsumerState<VoicePage> with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
   bool _isVoiceTriggerHovered = false;
@@ -1027,7 +1029,7 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
                                               'chat_${index}_${entry.isUser}_${entry.isTentative}_${entry.text.hashCode}',
                                             ),
                                             isUser: entry.isUser,
-                                            text: entry.text,
+                                            text: cleanBrandingText(entry.text, ref.watch(brandingProvider)),
                                             isTentative: entry.isTentative,
                                             isPrevSame: isPrevSame,
                                             isNextSame: isNextSame,

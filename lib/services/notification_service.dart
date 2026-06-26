@@ -35,6 +35,11 @@ class NotificationItem {
   final Color bg;
   final bool isPriority;
 
+  /// Which slot (0, 1, 2) this notification belongs to.
+  /// Slot maps to the prospect at that index in the active banker's prospects list.
+  /// Defaults to 0.
+  final int prospectSlot;
+
   /// Optional rich detail shown in the modal when the card is tapped
   final NotificationDetail? detail;
 
@@ -47,6 +52,7 @@ class NotificationItem {
     required this.iconColor,
     required this.bg,
     this.isPriority = false,
+    this.prospectSlot = 0,
     this.detail,
   });
 }
@@ -66,6 +72,7 @@ class NotificationService extends ChangeNotifier {
       iconColor: const Color(0xFF7C5410),
       bg: const Color(0xFFFBEAD5),
       isPriority: true,
+      prospectSlot: 0,
       detail: NotificationDetail(
         headerLabel: 'NEXT MEETING · MAY 6 · 2:00 PM ET',
         sections: const [
@@ -121,6 +128,7 @@ class NotificationService extends ChangeNotifier {
       iconColor: const Color(0xFF0F6E56),
       bg: const Color(0xFFE1F5EE),
       isPriority: true,
+      prospectSlot: 1,
       detail: NotificationDetail(
         headerLabel: 'CALL SUMMARY · APR 29',
         sections: const [
@@ -162,6 +170,7 @@ class NotificationService extends ChangeNotifier {
       iconColor: const Color(0xFF5B55D9),
       bg: const Color(0xFFEEEDFE),
       isPriority: true,
+      prospectSlot: 2,
       detail: NotificationDetail(
         headerLabel: 'NEW GUIDE · ADDED BY SARAH',
         sections: const [
@@ -186,6 +195,31 @@ class NotificationService extends ChangeNotifier {
           ),
         ],
       ),
+    ),
+    // ── Additional Meeting Confirmed cards for prospects 1 and 2 ─────────────
+    // These appear ONLY in the top-bar (isBanker filter: title == 'Meeting confirmed').
+    // Their prospectSlot matches the same prospect as Call summary (slot 1) and New guide (slot 2).
+    NotificationItem(
+      title: 'Meeting confirmed',
+      message: 'Intro call with Sarah on May 6 at 2:00 PM ET. Tap to prep.',
+      footer: 'Apr 28 · Click to prepare',
+      time: 'Apr 28',
+      icon: Icons.calendar_today_rounded,
+      iconColor: const Color(0xFF7C5410),
+      bg: const Color(0xFFFBEAD5),
+      isPriority: true,
+      prospectSlot: 1,
+    ),
+    NotificationItem(
+      title: 'Meeting confirmed',
+      message: 'Intro call with Sarah on May 6 at 2:00 PM ET. Tap to prep.',
+      footer: 'Apr 28 · Click to prepare',
+      time: 'Apr 28',
+      icon: Icons.calendar_today_rounded,
+      iconColor: const Color(0xFF7C5410),
+      bg: const Color(0xFFFBEAD5),
+      isPriority: true,
+      prospectSlot: 2,
     ),
   ];
 
