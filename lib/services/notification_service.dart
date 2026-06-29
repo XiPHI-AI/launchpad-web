@@ -196,9 +196,6 @@ class NotificationService extends ChangeNotifier {
         ],
       ),
     ),
-    // ── Additional Meeting Confirmed cards for prospects 1 and 2 ─────────────
-    // These appear ONLY in the top-bar (isBanker filter: title == 'Meeting confirmed').
-    // Their prospectSlot matches the same prospect as Call summary (slot 1) and New guide (slot 2).
     NotificationItem(
       title: 'Meeting confirmed',
       message: 'Intro call with Sarah on May 6 at 2:00 PM ET. Tap to prep.',

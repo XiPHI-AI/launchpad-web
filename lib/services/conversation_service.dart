@@ -56,6 +56,7 @@ class ProspectInitResult {
   final String? bankerId;
   final String? bankerName;
   final String? bankerPosition;
+  final String? lastSeenAt;
 
   ProspectInitResult({
     required this.prospectId,
@@ -77,6 +78,7 @@ class ProspectInitResult {
     this.bankerId,
     this.bankerName,
     this.bankerPosition,
+    this.lastSeenAt,
   });
 
   Map<String, dynamic> toDynamicVariables({bool lockProfileFields = false}) {
@@ -213,6 +215,7 @@ class ProductPublic {
   final List<String> benefits;
   final String? integrationInfo;
   final String? signupUrl;
+  final String? bankName;
   final double? matchScore;
   final String? matchReasoning;
   final String? paraphrasedMatchReasoning;
@@ -234,6 +237,7 @@ class ProductPublic {
     this.benefits = const [],
     this.integrationInfo,
     this.signupUrl,
+    this.bankName,
     this.matchScore,
     this.matchReasoning,
     this.paraphrasedMatchReasoning,
@@ -258,6 +262,7 @@ class ProductPublic {
       benefits: List<String>.from(json['benefits'] ?? []),
       integrationInfo: json['integration_info'] as String?,
       signupUrl: json['signup_url'] as String?,
+      bankName: json['bank_name'] as String?,
       matchScore: (json['match_score'] as num?)?.toDouble(),
       matchReasoning: json['match_reasoning'] as String?,
       paraphrasedMatchReasoning: json['paraphrased_match_reasoning'] as String?,
@@ -1009,6 +1014,7 @@ class ConversationService {
         bankerId: data['banker_id'] as String?,
         bankerName: data['banker_name'] as String?,
         bankerPosition: data['banker_position'] as String?,
+        lastSeenAt: data['last_seen_at'] as String?,
         classification: classificationData == null
             ? null
             : ProspectClassification(

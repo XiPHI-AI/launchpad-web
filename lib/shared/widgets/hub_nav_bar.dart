@@ -425,7 +425,7 @@ class HubNavBar extends StatelessWidget {
               child: Consumer(
                 builder: (context, ref, _) {
                   final branding = ref.watch(brandingProvider);
-                  final isMyBanker = branding == BrandingMode.myBanker;
+                  final isMyBanker = branding == BrandingMode.myBank;
                   return RichText(
                     text: TextSpan(
                       style: const TextStyle(
@@ -436,11 +436,25 @@ class HubNavBar extends StatelessWidget {
                       ),
                       children: isMyBanker
                           ? [
-                              const TextSpan(text: 'My '),
-                              const TextSpan(
-                                text: 'Banker',
-                                style: TextStyle(color: AppThemeTokens.goldAccent),
-                              ),
+                              ...(() {
+                                final parts = myBankText.split(' ');
+                                if (parts.length > 1) {
+                                  return [
+                                    TextSpan(text: '${parts.first} '),
+                                    TextSpan(
+                                      text: parts.sublist(1).join(' '),
+                                      style: const TextStyle(color: AppThemeTokens.goldAccent),
+                                    ),
+                                  ];
+                                } else {
+                                  return [
+                                    TextSpan(
+                                      text: myBankText,
+                                      style: const TextStyle(color: AppThemeTokens.goldAccent),
+                                    ),
+                                  ];
+                                }
+                              })(),
                               if (isBankerView)
                                 const TextSpan(
                                   text: '  ·  Banker view',
@@ -478,23 +492,7 @@ class HubNavBar extends StatelessWidget {
           const Spacer(),
           if (!isMobile) ...[
             if (isBankerView) ...[
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFC9A84C).withOpacity(0.18),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: const Color(0xFFC9A84C).withOpacity(0.25)),
-                ),
-                child: const Text(
-                  'Innovation Banking',
-                  style: TextStyle(
-                    color: AppThemeTokens.goldAccent,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
+              // Removed middle option
             ] else ...[
               Wrap(
                 spacing: 8,
@@ -526,10 +524,8 @@ class HubNavBar extends StatelessWidget {
               ),
             ],
             const Spacer(),
-            if (!isBankerView) ...[
-              const NavbarNotificationIcon(),
-              const SizedBox(width: 16),
-            ],
+            const NavbarNotificationIcon(),
+            const SizedBox(width: 16),
             if (isBankerView && bankers != null && bankers!.isNotEmpty)
               PopupMenuButton<Banker>(
                 offset: const Offset(0, 46),

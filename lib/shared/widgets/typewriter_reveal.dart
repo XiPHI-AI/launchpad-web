@@ -10,6 +10,7 @@ class TypewriterReveal extends StatefulWidget {
   final bool enabled;
   final Widget Function(String visibleText) builder;
   final VoidCallback? onTick;
+  final VoidCallback? onComplete;
 
   const TypewriterReveal({
     super.key,
@@ -17,6 +18,7 @@ class TypewriterReveal extends StatefulWidget {
     required this.enabled,
     required this.builder,
     this.onTick,
+    this.onComplete,
   });
 
   @override
@@ -44,6 +46,7 @@ class _TypewriterRevealState extends State<TypewriterReveal> {
   @override
   void dispose() {
     _timer?.cancel();
+    widget.onComplete?.call();
     super.dispose();
   }
 
@@ -61,6 +64,7 @@ class _TypewriterRevealState extends State<TypewriterReveal> {
     if (!widget.enabled || text.isEmpty) {
       _visibleCount = text.length;
       if (mounted) setState(() {});
+      widget.onComplete?.call();
       return;
     }
 
@@ -76,6 +80,7 @@ class _TypewriterRevealState extends State<TypewriterReveal> {
 
       if (_visibleCount >= text.length) {
         timer.cancel();
+        widget.onComplete?.call();
         return;
       }
 
@@ -83,6 +88,9 @@ class _TypewriterRevealState extends State<TypewriterReveal> {
         _visibleCount = (_visibleCount + step).clamp(0, text.length);
       });
       widget.onTick?.call();
+      if (_visibleCount >= text.length) {
+        widget.onComplete?.call();
+      }
     });
   }
 

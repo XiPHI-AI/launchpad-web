@@ -1,6 +1,8 @@
 FROM debian:bullseye-slim AS build
 
 ARG API_BASE_URL
+ARG jpmc_innovation_economy
+ARG my_bank
 
 RUN apt-get update && apt-get install -y \
     curl \
@@ -39,7 +41,10 @@ WORKDIR /app
 COPY --chown=flutter:flutter . .
 
 RUN flutter pub get
-RUN flutter build web --release --dart-define=API_BASE_URL=${API_BASE_URL:-http://localhost:8010/api/v1}
+RUN flutter build web --release \
+    --dart-define=API_BASE_URL=${API_BASE_URL:-http://localhost:8010/api/v1} \
+    --dart-define=jpmc_innovation_economy="${jpmc_innovation_economy:-J.P. Morgan Innovation Economy}" \
+    --dart-define=my_bank="${my_bank:-My Bank}"
 
 FROM nginx:alpine AS production
 

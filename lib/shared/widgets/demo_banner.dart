@@ -16,8 +16,7 @@ class DemoBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 768;
-    final text =
-        '🔵 Demo mockup — Prospectz.ai simulation${isMobile ? '' : ' of the J.P. Morgan startups page by Intelligence Labz'}';
+    final text = 'Demo - Prospectz.ai by Intelligence Labz';
 
     return Material(
       color: AppThemeTokens.demoBannerBg,

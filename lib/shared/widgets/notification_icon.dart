@@ -1,15 +1,18 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/notification_service.dart';
+import '../../features/banker/banker_crm_page.dart';
+import '../../features/relationship_hub/relationship_hub_page.dart';
 
-class NavbarNotificationIcon extends StatefulWidget {
+class NavbarNotificationIcon extends ConsumerStatefulWidget {
   const NavbarNotificationIcon({super.key});
 
   @override
-  State<NavbarNotificationIcon> createState() => _NavbarNotificationIconState();
+  ConsumerState<NavbarNotificationIcon> createState() => _NavbarNotificationIconState();
 }
 
-class _NavbarNotificationIconState extends State<NavbarNotificationIcon> {
+class _NavbarNotificationIconState extends ConsumerState<NavbarNotificationIcon> {
   final NotificationService _notifService = NotificationService();
   final LayerLink _link = LayerLink();
   OverlayEntry? _overlayEntry;
@@ -37,12 +40,14 @@ class _NavbarNotificationIconState extends State<NavbarNotificationIcon> {
 
   void _showOverlay() {
     if (_overlayEntry != null) return;
+    final prospects = ref.read(bankerProspectsProvider);
     _overlayEntry = OverlayEntry(
       builder: (context) => _NotificationDropdown(
         link: _link,
         notifService: _notifService,
         isOpen: _isOpen,
         onClose: _toggleOpen,
+        prospects: prospects,
         onMouseEnter: () => _hideTimer?.cancel(),
         onMouseExit: () {
           if (!_isOpen) _startHideTimer();
@@ -145,6 +150,7 @@ class _NotificationDropdown extends StatefulWidget {
   final VoidCallback onClose;
   final VoidCallback onMouseEnter;
   final VoidCallback onMouseExit;
+  final List<CrmProspect> prospects;
 
   const _NotificationDropdown({
     required this.link,
@@ -153,6 +159,7 @@ class _NotificationDropdown extends StatefulWidget {
     required this.onClose,
     required this.onMouseEnter,
     required this.onMouseExit,
+    required this.prospects,
   });
 
   @override
@@ -180,8 +187,26 @@ class _NotificationDropdownState extends State<_NotificationDropdown> {
 
   @override
   Widget build(BuildContext context) {
-    final history = widget.notifService.dropdownHistory;
-    final visible = _viewAll ? history : history.take(5).toList();
+    final rawList = widget.notifService.activeHubNotifications;
+    final localizedList = rawList.map((item) {
+      String? pName;
+      String? fName;
+      if (widget.prospects.isNotEmpty) {
+        final index = item.prospectSlot % widget.prospects.length;
+        final p = widget.prospects[index];
+        pName = p.name;
+        fName = p.founderName;
+      }
+      return localizeNotification(
+        item,
+        'Sarah Chen',
+        isBanker: true,
+        prospectName: pName,
+        founderName: fName,
+      );
+    }).toList();
+
+    final visible = _viewAll ? localizedList : localizedList.take(5).toList();
 
     return Stack(
       children: [
@@ -235,7 +260,7 @@ class _NotificationDropdownState extends State<_NotificationDropdown> {
                               ),
                             ),
                             const Spacer(),
-                            if (history.isNotEmpty)
+                            if (localizedList.isNotEmpty)
                               GestureDetector(
                                 onTap: widget.notifService.clearHistory,
                                 child: const Text(
@@ -250,7 +275,7 @@ class _NotificationDropdownState extends State<_NotificationDropdown> {
                           ],
                         ),
                       ),
-                      if (history.isEmpty)
+                      if (localizedList.isEmpty)
                         const Padding(
                           padding: EdgeInsets.symmetric(vertical: 32),
                           child: Center(
@@ -271,7 +296,7 @@ class _NotificationDropdownState extends State<_NotificationDropdown> {
                             ),
                           ),
                         ),
-                        if (history.length > 5 && !_viewAll)
+                        if (localizedList.length > 5 && !_viewAll)
                           GestureDetector(
                             onTap: () => setState(() => _viewAll = true),
                             child: Container(
@@ -325,14 +350,21 @@ class _NotificationDropdownState extends State<_NotificationDropdown> {
                   n.title,
                   style: const TextStyle(
                     fontSize: 13,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.bold,
                     color: Color(0xFF202020),
                   ),
                 ),
-                const SizedBox(height: 2),
+                if (n.message.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    n.message,
+                    style: const TextStyle(fontSize: 11, color: Color(0xFF4B5563)),
+                  ),
+                ],
+                const SizedBox(height: 4),
                 Text(
                   n.time,
-                  style: const TextStyle(fontSize: 11, color: Color(0xFF8D8578)),
+                  style: const TextStyle(fontSize: 10, color: Color(0xFF8D8578)),
                 ),
               ],
             ),

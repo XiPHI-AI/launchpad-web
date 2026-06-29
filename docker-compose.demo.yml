@@ -6,6 +6,8 @@ services:
       dockerfile: Dockerfile
       args:
         API_BASE_URL: ${API_BASE_URL}
+        jpmc_innovation_economy: ${jpmc_innovation_economy}
+        my_bank: ${my_bank}
     restart: unless-stopped
     env_file:
       - .env.demo

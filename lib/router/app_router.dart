@@ -19,15 +19,15 @@ class AppRoutes {
   static const banker = '/banker';
   static const home = '/';
 
-  static const mybankerHome = '/mybanker';
-  static const mybankerBanker = '/mybanker/banker';
-  static const mybankerBankerDetail = '/mybanker/banker/:prospectId';
-  static const mybankerStageSelector = '/mybanker/stages';
-  static const mybankerRelationshipHub = '/mybanker/relationship-hub';
-  static const mybankerProspect = '/mybanker/p=:prospectId';
+  static const mybankerHome = '/mybank';
+  static const mybankerBanker = '/mybank/banker';
+  static const mybankerBankerDetail = '/mybank/banker/:prospectId';
+  static const mybankerStageSelector = '/mybank/stages';
+  static const mybankerRelationshipHub = '/mybank/relationship-hub';
+  static const mybankerProspect = '/mybank/p=:prospectId';
 
-  static const mybankersBanker = '/mybankers/banker';
-  static const mybankersBankerDetail = '/mybankers/banker/:prospectId';
+  static const mybankersBanker = '/mybanks/banker';
+  static const mybankersBankerDetail = '/mybanks/banker/:prospectId';
 }
 
 /// Simple [ChangeNotifier] owned by the root widget and notified whenever
@@ -55,16 +55,16 @@ GoRouter createRouter({
       final path = uri.path;
 
       // 1. Branding detection and persistence
-      final isTargetMyBanker = path.startsWith('/mybanker') || path.startsWith('/mybankers');
+      final isTargetMyBanker = path.startsWith('/mybank') || path.startsWith('/mybanks');
       if (isTargetMyBanker) {
-        Future.microtask(() => ref.read(brandingProvider.notifier).setBranding(BrandingMode.myBanker));
+        Future.microtask(() => ref.read(brandingProvider.notifier).setBranding(BrandingMode.myBank));
       } else {
-        // If not explicitly visiting a mybanker path, but our state is myBanker,
+        // If not explicitly visiting a mybank path, but our state is myBank,
         // we redirect them to the branded path.
         final currentBranding = ref.read(brandingProvider);
-        if (currentBranding == BrandingMode.myBanker) {
+        if (currentBranding == BrandingMode.myBank) {
           if (path != AppRoutes.login && path != AppRoutes.signup) {
-            final newPath = path == '/' ? '/mybanker' : '/mybanker$path';
+            final newPath = path == '/' ? '/mybank' : '/mybank$path';
             final newUri = Uri(path: newPath, queryParameters: uri.queryParameters);
             return newUri.toString();
           }
@@ -86,7 +86,7 @@ GoRouter createRouter({
 
       if (isOnLogin || isOnSignup) {
         final currentBranding = ref.read(brandingProvider);
-        return currentBranding == BrandingMode.myBanker ? AppRoutes.mybankerHome : AppRoutes.home;
+        return currentBranding == BrandingMode.myBank ? AppRoutes.mybankerHome : AppRoutes.home;
       }
 
       return null;

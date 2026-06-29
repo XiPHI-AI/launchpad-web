@@ -22,9 +22,9 @@ class _GuideMessage {
   final bool isUser;
   final String text;
   final bool isMarkdown;
-  final bool animate;
+  bool animate;
 
-  const _GuideMessage({
+  _GuideMessage({
     required this.isUser,
     required this.text,
     this.isMarkdown = false,
@@ -318,6 +318,15 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
     final isMobile = screenWidth < 768;
     final isSmallScreen = !isDesktop;
 
+    final branding = ref.watch(brandingProvider);
+    final filteredProducts = _products.where((p) {
+      if (branding == BrandingMode.myBank) {
+        return p.bankName?.toLowerCase() == 'my_bank';
+      } else {
+        return p.bankName == null || p.bankName!.isEmpty || p.bankName!.toLowerCase() == 'jpmc';
+      }
+    }).toList();
+
     final mainContent = _loading
         ? const Center(child: CircularProgressIndicator())
         : isDesktop
@@ -344,7 +353,7 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
                             email: _userEmail,
                             onTapProduct: _showProductModal,
                             onTapLearning: _showLearningModal,
-                            products: _products,
+                            products: filteredProducts,
                             bankerName: _bankerName,
                             bankerPosition: _bankerPosition,
                             onMessageTap: _onMessageTap,
@@ -384,7 +393,7 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
                 priorities: _priorities,
                 prospectId: widget.prospectId,
                 email: _userEmail,
-                products: _products,
+                products: filteredProducts,
                 trailingPanel: null, // Chat is shown in floating bottom sheet instead!
                 onTapProduct: _showProductModal,
                 onTapLearning: _showLearningModal,
@@ -763,6 +772,7 @@ class _NotificationsSection extends StatefulWidget {
   final String? prospectName;
   final String? founderName;
   final List<CrmProspect>? prospectsList;
+  final bool isDetailPage;
 
   const _NotificationsSection({
     required this.bankerName,
@@ -771,6 +781,7 @@ class _NotificationsSection extends StatefulWidget {
     this.prospectName,
     this.founderName,
     this.prospectsList,
+    this.isDetailPage = false,
   });
 
   @override
@@ -820,14 +831,36 @@ class _NotificationsSectionState extends State<_NotificationsSection> {
   Widget build(BuildContext context) {
     // Build list of (originalIndex, localizedItem) pairs
     final List<(int, NotificationItem)> activeIndexedItems = [];
+    final prospects = widget.prospectsList ?? [];
+
     for (int i = 0; i < _notifService.activeHubNotifications.length; i++) {
       final item = _notifService.activeHubNotifications[i];
-      // In banker view, only show 'Meeting confirmed' in the top bar (one per prospect).
-      // Call summary and New guide appear only inside the prospect detail panel.
-      if (widget.isBanker && item.title != 'Meeting confirmed') continue;
+
+      if (widget.isBanker) {
+        if (widget.isDetailPage) {
+          // Inside prospect detail page:
+          // 1. Only show notifications belonging to this prospect slot
+          if (prospects.isNotEmpty && widget.prospectName != null) {
+            final prospectIndex = prospects.indexWhere((p) => p.name == widget.prospectName);
+            if (prospectIndex >= 0) {
+              final assignedIndex = item.prospectSlot % prospects.length;
+              if (assignedIndex != prospectIndex) continue;
+            }
+          }
+          // 2. Allow different kinds of notifications (do NOT filter out non-Meeting confirmed ones)
+        } else {
+          // On main Banker dashboard:
+          // 1. Only show 'Meeting confirmed' in the top bar (one per prospect)
+          if (item.title != 'Meeting confirmed') continue;
+        }
+      } else {
+        // Client view
+        if (activeIndexedItems.length >= 3) break;
+      }
+
       String? pName = widget.prospectName;
       String? fName = widget.founderName;
-      if (widget.prospectsList != null) {
+      if (widget.prospectsList != null && widget.prospectsList!.isNotEmpty) {
         final assigned = getProspectForNotification(item, widget.prospectsList!);
         pName = assigned.name;
         fName = assigned.founderName;
@@ -1713,7 +1746,9 @@ class _HubMainColumnState extends ConsumerState<_HubMainColumn> {
                   final sorted = List<ProductPublic>.from(widget.products)
                     ..sort((a, b) => (b.matchScore ?? 0).compareTo(a.matchScore ?? 0));
                   return sorted.take(_showAllProducts ? sorted.length : 5);
-                })().map((product) {
+                })().toList().asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final product = entry.value;
                   final icon = _getIconForCategory(product.category);
                   final tint = _getTintForCategory(product.category);
 
@@ -1733,19 +1768,20 @@ class _HubMainColumnState extends ConsumerState<_HubMainColumn> {
                       matchReasoning: product.matchReasoning,
                       productId: product.productId,
                       prospectId: widget.prospectId,
+                      defaultHover: index == 0 && !_hasInteractedProducts,
                       onInteraction: () =>
                           setState(() => _hasInteractedProducts = true),
                       onTap: () => widget.onTapProduct?.call(context, product),
                     ),
                   );
                 }).toList(),
-                if (!_showAllProducts && widget.products.length > 5)
+                if (widget.products.length > 5)
                   SizedBox(
                     width: 320,
                     height: 240,
                     child: Center(
                       child: TextButton(
-                        onPressed: () => setState(() => _showAllProducts = true),
+                        onPressed: () => setState(() => _showAllProducts = !_showAllProducts),
                         style: TextButton.styleFrom(
                           foregroundColor: AppThemeTokens.buttonPrimary,
                           textStyle: const TextStyle(
@@ -1754,12 +1790,12 @@ class _HubMainColumnState extends ConsumerState<_HubMainColumn> {
                             letterSpacing: 0.5,
                           ),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text("Show more"),
-                            SizedBox(width: 4),
-                            Icon(Icons.keyboard_arrow_down_rounded, size: 20),
+                            Text(_showAllProducts ? "Show less" : "Show more"),
+                            const SizedBox(width: 4),
+                            Icon(_showAllProducts ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, size: 20),
                           ],
                         ),
                       ),
@@ -2255,7 +2291,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
       if (!mounted) return;
       setState(() {
         _messages.add(
-          const _GuideMessage(
+          _GuideMessage(
             isUser: false,
             text:
                 'I could not reach the guide right now. Please try again in a moment.',
@@ -3098,6 +3134,9 @@ class _GuideMessageBubble extends StatelessWidget {
       text: message.text,
       enabled: enableTypewriter && !isUser,
       onTick: onTypewriterTick,
+      onComplete: () {
+        message.animate = false;
+      },
       builder: _buildMessageContent,
     );
 
@@ -4560,14 +4599,9 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
       _buildRow('Conversations', '${_profile!.conversationCount}'),
     ];
 
-    final insightRows = _profile!.aiAttributes.isNotEmpty
-        ? _profile!.aiAttributes.entries
-            .map((e) => _buildRow(
-                  _formatAttributeLabel(e.key),
-                  _formatAttributeValue(e.value),
-                ))
-            .toList()
-        : null;
+    final aiAttributesHistorical = _profile!.aiAttributesHistorical.isNotEmpty
+        ? _profile!.aiAttributesHistorical
+        : _profile!.aiAttributes;
 
     if (widget.isBanker) {
       return Column(
@@ -4585,9 +4619,9 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
               ),
             ],
           ),
-          if (insightRows != null && insightRows.isNotEmpty) ...[
+          if (aiAttributesHistorical.isNotEmpty) ...[
             const SizedBox(height: 32),
-            _buildSentenceSection('What We Have Collected', insightRows),
+            _buildSentenceSection('What We Have Collected', aiAttributesHistorical),
           ],
         ],
       );
@@ -4599,9 +4633,9 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
         _buildSection(companyLabel, manualFormRows),
         const SizedBox(height: 32),
         _buildSection('YOUR DETAILS', firstFormRows),
-        if (insightRows != null && insightRows.isNotEmpty) ...[
+        if (aiAttributesHistorical.isNotEmpty) ...[
           const SizedBox(height: 32),
-          _buildSentenceSection('What We Have Collected', insightRows),
+          _buildSentenceSection('What We Have Collected', aiAttributesHistorical),
         ],
       ],
     );
@@ -4800,8 +4834,7 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
     );
   }
 
-  Widget _buildSentenceSection(String label, List<Widget?> rows) {
-    final nonNullRows = rows.whereType<Widget>().toList();
+  Widget _buildSentenceSection(String label, Map<String, dynamic> aiAttributes) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -4809,21 +4842,77 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
         const SizedBox(height: 10),
         Container(
           decoration: BoxDecoration(
-            border: Border.all(color: const Color(0xFFE7DCC8)),
+            color: Colors.white,
             borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFE7DCC8)),
           ),
+          clipBehavior: Clip.antiAlias,
           child: Column(
-            children: nonNullRows
-                .asMap()
-                .entries
-                .map((entry) => Column(
-                      children: [
-                        entry.value,
-                        if (entry.key < nonNullRows.length - 1)
-                          const Divider(height: 1, color: Color(0xFFEDE7DB), indent: 14, endIndent: 14),
-                      ],
-                    ))
-                .toList(),
+            children: aiAttributes.entries.map((entry) {
+              final valStr = entry.value.toString();
+              final prevIndex = valStr.indexOf(' (Previously: ');
+              Widget valueWidget;
+              if (prevIndex != -1) {
+                final currentVal = valStr.substring(0, prevIndex);
+                final prevVal = valStr.substring(prevIndex);
+                valueWidget = RichText(
+                  text: TextSpan(
+                    style: const TextStyle(fontSize: 11, color: Color(0xFF1A1A18), fontFamily: 'Outfit'),
+                    children: [
+                      TextSpan(text: currentVal, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      TextSpan(
+                        text: prevVal,
+                        style: const TextStyle(
+                          color: Color(0xFF8D8578),
+                          fontStyle: FontStyle.italic,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              } else {
+                valueWidget = Text(
+                  valStr,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF1A1A18),
+                    fontWeight: FontWeight.w500,
+                    fontFamily: 'Outfit',
+                  ),
+                );
+              }
+
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: const BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: Color(0x14000000), width: 0.5),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        _formatAttributeLabel(entry.key),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF04213D),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 5,
+                      child: valueWidget,
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
           ),
         ),
       ],
@@ -6760,6 +6849,7 @@ class NotificationsSection extends StatelessWidget {
   final String? prospectName;
   final String? founderName;
   final List<CrmProspect>? prospectsList;
+  final bool isDetailPage;
 
   const NotificationsSection({
     key,
@@ -6769,6 +6859,7 @@ class NotificationsSection extends StatelessWidget {
     this.prospectName,
     this.founderName,
     this.prospectsList,
+    this.isDetailPage = false,
   }) : super(key: key);
 
   @override
@@ -6780,6 +6871,7 @@ class NotificationsSection extends StatelessWidget {
       prospectName: prospectName,
       founderName: founderName,
       prospectsList: prospectsList,
+      isDetailPage: isDetailPage,
     );
   }
 }

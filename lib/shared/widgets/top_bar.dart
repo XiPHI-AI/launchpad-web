@@ -36,7 +36,7 @@ class AppTopBar extends ConsumerWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final branding = ref.watch(brandingProvider);
-    final isMyBanker = branding == BrandingMode.myBanker;
+    final isMyBanker = branding == BrandingMode.myBank;
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 768;
     final isDesktop = screenWidth >= 1024;
@@ -58,7 +58,7 @@ class AppTopBar extends ConsumerWidget implements PreferredSizeWidget {
               context.go('/');
             },
             child: Text(
-              isMyBanker ? 'My Banker' : 'J.P.Morgan',
+              isMyBanker ? myBankText : 'J.P.Morgan',
               style: TextStyle(
                 fontSize: isMyBanker ? 22 : 26,
                 color: AppThemeTokens.brandInk,

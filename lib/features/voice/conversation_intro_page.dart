@@ -154,11 +154,11 @@ class ConversationIntroPage extends ConsumerStatefulWidget {
 
 class _ConversationIntroPageState extends ConsumerState<ConversationIntroPage> {
   _StageContent getBrandedContent(BrandingMode mode, _StageContent origin) {
-    if (mode == BrandingMode.myBanker) {
+    if (mode == BrandingMode.myBank) {
       return _StageContent(
-        heading: origin.heading.replaceAll('JPMC', 'My Banker'),
-        description: origin.description.replaceAll('JPMC', 'My Banker'),
-        topics: origin.topics.map((t) => t.replaceAll('JPMC', 'My Banker')).toList(),
+        heading: origin.heading.replaceAll('JPMC', myBankText),
+        description: origin.description.replaceAll('JPMC', myBankText),
+        topics: origin.topics.map((t) => t.replaceAll('JPMC', myBankText)).toList(),
         duration: origin.duration,
       );
     }

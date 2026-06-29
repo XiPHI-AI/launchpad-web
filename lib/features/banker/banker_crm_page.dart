@@ -358,6 +358,20 @@ class BankerProspectsNotifier extends StateNotifier<List<CrmProspect>> {
     }
   }
 
+  String _formatLastSeenAt(String isoString) {
+    try {
+      final dt = DateTime.parse(isoString).toLocal();
+      final weekdayStr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][dt.weekday - 1];
+      final monthStr = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][dt.month - 1];
+      final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+      final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+      final minute = dt.minute.toString().padLeft(2, '0');
+      return '$weekdayStr, $monthStr ${dt.day} at $hour:$minute $ampm';
+    } catch (_) {
+      return 'Today';
+    }
+  }
+
   CrmProspect _mapToCrmProspect(ProspectInitResult r) {
     final snapshot = r.profileSnapshot;
     final String id = r.prospectId;
@@ -449,7 +463,7 @@ class BankerProspectsNotifier extends StateNotifier<List<CrmProspect>> {
       notes = mockMatch.notes;
     }
 
-    int docsReceivedCount = docs.where((d) => d.status == 'Received').length;
+    int docsReceivedCount = docs.where((d) => d.status == 'Received' || d.status == 'Needs review').length;
     int docsTotalCount = docs.length;
     String docsReceivedText = docsTotalCount == 0 ? 'None assigned' : '$docsReceivedCount/$docsTotalCount received';
 
@@ -493,7 +507,7 @@ class BankerProspectsNotifier extends StateNotifier<List<CrmProspect>> {
       docsTotalCount: docsTotalCount,
       materialsReadText: materialsReadText,
       materialsReadSub: materialsReadSub,
-      lastActive: mockMatch?.lastActive ?? 'Today',
+      lastActive: r.lastSeenAt != null ? _formatLastSeenAt(r.lastSeenAt!) : (mockMatch?.lastActive ?? 'Today'),
       avatarText: initials.isEmpty ? 'C' : initials,
       avatarBg: avatarBg,
       avatarFg: avatarFg,
@@ -1181,23 +1195,50 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
                 ),
                 const SizedBox(width: 10),
               ],
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: prospect.avatarBg,
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  prospect.avatarText,
-                  style: TextStyle(
-                    fontFamily: 'DM Serif Display',
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: prospect.avatarFg,
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: prospect.avatarBg,
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      prospect.avatarText,
+                      style: TextStyle(
+                        fontFamily: 'DM Serif Display',
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: prospect.avatarFg,
+                      ),
+                    ),
                   ),
-                ),
+                  if (() {
+                    final prospects = ref.read(bankerProspectsProvider);
+                    final pIdx = prospects.indexWhere((p) => p.id == prospect.id);
+                    if (pIdx < 0 || prospects.isEmpty) return false;
+                    for (var item in _notifService.activeHubNotifications) {
+                      if (item.prospectSlot % prospects.length == pIdx) return true;
+                    }
+                    return false;
+                  }())
+                    Positioned(
+                      top: -1,
+                      right: -1,
+                      child: Container(
+                        width: 9,
+                        height: 9,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE0533C),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 1.5),
+                        ),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -1306,7 +1347,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(
-                color: isActive ? BankerColors.navy : Colors.transparent,
+                color: isActive ? BankerColors.blue : Colors.transparent,
                 width: 2,
               ),
             ),
@@ -1315,7 +1356,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
             label,
             style: TextStyle(
               fontSize: 11,
-              color: isActive ? BankerColors.navy : BankerColors.muted,
+              color: BankerColors.blue,
               fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
             ),
           ),
@@ -4135,29 +4176,45 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
 
       if (_activeFilter == 'all') return true;
       if (_activeFilter == 'action') {
-        return p.status.contains('Awaiting docs') || p.status.contains('Call');
+        return p.status.contains('Awaiting docs') || p.status.contains('Call') || p.docsReceivedCount < p.docsTotalCount || p.status.contains('Waiting') || p.status.contains('⏳');
       }
       if (_activeFilter == 'call') {
-        return p.status.contains('Call');
+        return p.status.contains('Call') || p.status.contains('Intro chat done') || p.status.contains('📅') || p.status.contains('✨');
       }
       if (_activeFilter == 'docs') {
-        return p.status.contains('Awaiting docs');
+        return p.status.contains('Awaiting docs') || p.docsReceivedCount < p.docsTotalCount || p.status.contains('⚠');
       }
       if (_activeFilter == 'done') {
-        return p.status.contains('Fully onboarded');
+        return p.status.contains('Fully onboarded') || p.status.contains('onboard') || p.status.contains('✓');
       }
       return true;
     }).toList();
 
     // 2. Sort
     filtered.sort((a, b) {
+      // If we clicked a filter chip, let's also sort accordingly by status priority!
+      if (_activeFilter == 'action') {
+        final aVal = a.status.contains('Waiting') || a.status.contains('⏳') ? 0 : (a.docsReceivedCount < a.docsTotalCount ? 1 : 2);
+        final bVal = b.status.contains('Waiting') || b.status.contains('⏳') ? 0 : (b.docsReceivedCount < b.docsTotalCount ? 1 : 2);
+        if (aVal != bVal) return aVal.compareTo(bVal);
+      } else if (_activeFilter == 'call') {
+        final aVal = a.status.contains('Call') || a.status.contains('📅') ? 0 : (a.status.contains('Intro chat done') || a.status.contains('✨') ? 1 : 2);
+        final bVal = b.status.contains('Call') || b.status.contains('📅') ? 0 : (b.status.contains('Intro chat done') || b.status.contains('✨') ? 1 : 2);
+        if (aVal != bVal) return aVal.compareTo(bVal);
+      } else if (_activeFilter == 'docs') {
+        final aRatio = a.docsTotalCount > 0 ? (a.docsReceivedCount / a.docsTotalCount) : 1.0;
+        final bRatio = b.docsTotalCount > 0 ? (b.docsReceivedCount / b.docsTotalCount) : 1.0;
+        if (aRatio != bRatio) return aRatio.compareTo(bRatio);
+      } else if (_activeFilter == 'done') {
+        final aVal = a.status.contains('Fully onboarded') || a.status.contains('✓') ? 0 : 1;
+        final bVal = b.status.contains('Fully onboarded') || b.status.contains('✓') ? 0 : 1;
+        if (aVal != bVal) return aVal.compareTo(bVal);
+      }
+
       int cmp = 0;
       switch (_sortColumn) {
         case 'Company':
           cmp = a.name.compareTo(b.name);
-          break;
-        case 'Stage':
-          cmp = a.stage.compareTo(b.stage);
           break;
         case 'Status':
           cmp = a.status.compareTo(b.status);
@@ -4489,9 +4546,9 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
   }) {
     final stats = [
       _StatItem(value: '$activeCount', label: 'Active prospects', sub: '↑ 3 this month', subColor: BankerColors.green),
-      _StatItem(value: '$needsActionCount', label: 'Need action', sub: '⚠ Review today', subColor: const Color(0xFFD97706)),
+      _StatItem(value: '$needsActionCount', label: 'Need action', sub: '', subColor: const Color(0xFFD97706)),
       _StatItem(value: '$callsCount', label: 'Calls this week', sub: 'Next: May 6', subColor: BankerColors.muted2),
-      _StatItem(value: '$awaitingDocsCount', label: 'Awaiting docs', sub: '4 overdue', subColor: const Color(0xFFD97706)),
+      _StatItem(value: '$awaitingDocsCount', label: 'Awaiting docs', sub: '', subColor: const Color(0xFFD97706)),
       _StatItem(value: '$onboardedCount', label: 'Fully onboarded', sub: '↑ 1 this week', subColor: BankerColors.green),
     ];
 
@@ -4532,11 +4589,13 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                     stat.label,
                     style: const TextStyle(fontSize: 10, color: BankerColors.muted2, fontWeight: FontWeight.w500),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    stat.sub,
-                    style: TextStyle(fontSize: 10, color: stat.subColor, fontWeight: FontWeight.w600),
-                  ),
+                  if (stat.sub.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      stat.sub,
+                      style: TextStyle(fontSize: 10, color: stat.subColor, fontWeight: FontWeight.w600),
+                    ),
+                  ],
                 ],
               ),
             );
@@ -4579,11 +4638,13 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                     stat.label,
                     style: const TextStyle(fontSize: 10, color: BankerColors.muted2, fontWeight: FontWeight.w500),
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    stat.sub,
-                    style: TextStyle(fontSize: 10, color: stat.subColor, fontWeight: FontWeight.w600),
-                  ),
+                  if (stat.sub.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      stat.sub,
+                      style: TextStyle(fontSize: 10, color: stat.subColor, fontWeight: FontWeight.w600),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -4637,47 +4698,14 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _buildFilterChip('All', 'all'),
-                      const SizedBox(width: 5),
-                      _buildFilterChip('⚠ Needs action', 'action'),
-                      const SizedBox(width: 5),
-                      _buildFilterChip('📅 Call scheduled', 'call'),
-                      const SizedBox(width: 5),
-                      _buildFilterChip('📄 Awaiting docs', 'docs'),
-                      const SizedBox(width: 5),
-                      _buildFilterChip('✓ Onboarded', 'done'),
-                    ],
-                  ),
-                ),
-              ),
             ],
           ),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              OutlinedButton(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Exporting prospects list to CSV...'), duration: Duration(seconds: 2)),
-                  );
-                },
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  side: const BorderSide(color: BankerColors.line2),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                child: const Text('Export', style: TextStyle(fontSize: 11, color: BankerColors.ink, fontWeight: FontWeight.bold)),
-              ),
-              const SizedBox(width: 8),
               if (isManager)
                 ElevatedButton(
-                                onPressed: _showAssignProspectDialog,
+                  onPressed: _showAssignProspectDialog,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: BankerColors.navy,
                     foregroundColor: Colors.white,
@@ -4736,7 +4764,6 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
           child: Row(
             children: [
               _buildHeaderCell('Company', flex: 3),
-              _buildHeaderCell('Stage', flex: 1),
               _buildHeaderCell('Status', flex: 2),
               _buildHeaderCell('Profile', flex: 2),
               _buildHeaderCell('Docs', flex: 2),
@@ -4846,15 +4873,7 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                                   ),
                                 ),
                               ),
-                              // Stage
-                              Expanded(
-                                flex: 1,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                                  alignment: Alignment.centerLeft,
-                                  child: Text(prospect.stage, style: const TextStyle(fontSize: 11, color: BankerColors.muted)),
-                                ),
-                              ),
+
                               // Status
                               Expanded(
                                 flex: 2,
@@ -4901,7 +4920,7 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8),
                                   alignment: Alignment.centerLeft,
-                                  child: _buildDocsBadge(prospect.docsReceivedText),
+                                  child: _buildDocsBadge(prospect),
                                 ),
                               ),
                               // Materials
@@ -5069,20 +5088,28 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
     );
   }
 
-  Widget _buildDocsBadge(String text) {
+  Widget _buildDocsBadge(CrmProspect prospect) {
     Color bg = BankerColors.cream;
     Color fg = BankerColors.muted2;
 
-    if (text.contains('1/')) {
-      bg = BankerColors.amberSoft;
-      fg = const Color(0xFF7C5410);
-    } else if (text.contains('0/')) {
+    final received = prospect.docsReceivedCount;
+    final total = prospect.docsTotalCount;
+
+    if (total == 0) {
+      bg = BankerColors.cream;
+      fg = BankerColors.muted2;
+    } else if (received == 0) {
       bg = BankerColors.redSoft;
       fg = const Color(0xFF991B1B);
-    } else if (text.contains('3/3') || text.contains('4/4')) {
+    } else if (received == total) {
       bg = BankerColors.greenSoft;
       fg = const Color(0xFF0F6E56);
+    } else {
+      bg = BankerColors.amberSoft;
+      fg = const Color(0xFF7C5410);
     }
+
+    final text = '$received received';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
