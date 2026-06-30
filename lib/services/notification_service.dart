@@ -63,6 +63,7 @@ class NotificationService extends ChangeNotifier {
   NotificationService._internal();
 
   final List<NotificationItem> _activeHubNotifications = [
+    // Slot 0 (Aster Labs, Jumbo / Co1)
     NotificationItem(
       title: 'Meeting confirmed',
       message: 'Intro call with Sarah on May 6 at 2:00 PM ET. Tap to prep.',
@@ -97,25 +98,6 @@ class NotificationService extends ChangeNotifier {
               'What would a deeper banking relationship unlock for us at our current stage?',
             ],
           ),
-          NotificationDetailSection(
-            icon: Icons.record_voice_over_outlined,
-            title: 'Questions Sarah is likely to ask you',
-            bullets: [
-              '"What does your operating cash balance look like, and how long is your runway?"',
-              '"Are you the only signatory on accounts today, or does anyone else have access?"',
-              '"Do you have a finance lead in place, or is this founder-led right now?"',
-              '"What\'s your likely next fundraise timeline?"',
-            ],
-          ),
-          NotificationDetailSection(
-            icon: Icons.folder_outlined,
-            title: 'Documents to have on hand',
-            bullets: [
-              'Investor overview deck — Uploaded ✓',
-              'Current bank statements or account overview — Not uploaded',
-              '18-month cash projection or burn model — Not uploaded',
-            ],
-          ),
         ],
       ),
     ),
@@ -128,7 +110,7 @@ class NotificationService extends ChangeNotifier {
       iconColor: const Color(0xFF0F6E56),
       bg: const Color(0xFFE1F5EE),
       isPriority: true,
-      prospectSlot: 1,
+      prospectSlot: 0,
       detail: NotificationDetail(
         headerLabel: 'CALL SUMMARY · APR 29',
         sections: const [
@@ -150,14 +132,6 @@ class NotificationService extends ChangeNotifier {
               'Follow-up call scheduled for May 13 to review account setup options',
             ],
           ),
-          NotificationDetailSection(
-            icon: Icons.auto_stories_outlined,
-            title: 'New material added to your learning path',
-            bullets: [
-              'Preparing for your first credit facility (added by Sarah)',
-              'How early-stage treasury accounts work',
-            ],
-          ),
         ],
       ),
     ),
@@ -166,6 +140,188 @@ class NotificationService extends ChangeNotifier {
       message: 'Preparing for your first credit facility, based on your call.',
       footer: 'Apr 29 · In your learning path',
       time: 'Apr 29',
+      icon: Icons.description_outlined,
+      iconColor: const Color(0xFF5B55D9),
+      bg: const Color(0xFFEEEDFE),
+      isPriority: true,
+      prospectSlot: 0,
+      detail: NotificationDetail(
+        headerLabel: 'NEW GUIDE · ADDED BY SARAH',
+        sections: const [
+          NotificationDetailSection(
+            icon: Icons.info_outline_rounded,
+            title: 'About this guide',
+            bullets: [
+              'Title: Preparing for your first credit facility',
+              '10 min read · Series A · Capital structure',
+              'Added by Sarah Chen based on your Apr 29 call conversation',
+            ],
+          ),
+        ],
+      ),
+    ),
+
+    // Slot 1 (Vancouver / 123's)
+    NotificationItem(
+      title: 'Meeting confirmed',
+      message: 'Intro call with Sarah on June 15 at 10:30 AM ET. Tap to prep.',
+      footer: 'June 10 · Click to prepare',
+      time: 'June 10',
+      icon: Icons.calendar_today_rounded,
+      iconColor: const Color(0xFF7C5410),
+      bg: const Color(0xFFFBEAD5),
+      isPriority: true,
+      prospectSlot: 1,
+      detail: NotificationDetail(
+        headerLabel: 'NEXT MEETING · JUNE 15 · 10:30 AM ET',
+        sections: const [
+          NotificationDetailSection(
+            icon: Icons.person_outline_rounded,
+            title: 'What Sarah already knows about you',
+            bullets: [
+              'Growth-stage posture, key expansion metrics, team of over 20',
+              'Seeking credit line options to leverage recent Series A funding round',
+              'Priority areas flagged: sweep account setup, risk management, operating accounts',
+            ],
+          ),
+          NotificationDetailSection(
+            icon: Icons.help_outline_rounded,
+            title: 'Questions to ask Sarah',
+            bullets: [
+              'What credit facility terms can we negotiate based on our Series A balance?',
+              'How long does the approval process take for an enterprise revolving credit line?',
+            ],
+          ),
+        ],
+      ),
+    ),
+    NotificationItem(
+      title: 'Call summary available',
+      message: 'June 8 call with Sarah. Topics, next steps, and new material added.',
+      footer: 'June 8 · Click to view',
+      time: 'June 8',
+      icon: Icons.call_outlined,
+      iconColor: const Color(0xFF0F6E56),
+      bg: const Color(0xFFE1F5EE),
+      isPriority: true,
+      prospectSlot: 1,
+      detail: NotificationDetail(
+        headerLabel: 'CALL SUMMARY · JUNE 8',
+        sections: const [
+          NotificationDetailSection(
+            icon: Icons.summarize_outlined,
+            title: 'Key topics discussed',
+            bullets: [
+              'Enterprise treasury architecture and investment sweep account yields',
+              'Credit facility limits and baseline covenant requirements',
+            ],
+          ),
+          NotificationDetailSection(
+            icon: Icons.next_plan_outlined,
+            title: 'Next steps agreed',
+            bullets: [
+              'Sarah will connect you with the lending director by June 12',
+              'You will upload your updated Q2 balance sheet by end of week',
+            ],
+          ),
+        ],
+      ),
+    ),
+    NotificationItem(
+      title: 'New guide added by Sarah',
+      message: 'Preparing for your first credit facility, based on your call.',
+      footer: 'June 9 · In your learning path',
+      time: 'June 9',
+      icon: Icons.description_outlined,
+      iconColor: const Color(0xFF5B55D9),
+      bg: const Color(0xFFEEEDFE),
+      isPriority: true,
+      prospectSlot: 1,
+      detail: NotificationDetail(
+        headerLabel: 'NEW GUIDE · ADDED BY SARAH',
+        sections: const [
+          NotificationDetailSection(
+            icon: Icons.info_outline_rounded,
+            title: 'About this guide',
+            bullets: [
+              'Title: Preparing for your first credit facility',
+              '10 min read · Series A · Capital structure',
+              'Added by Sarah Chen based on your June 8 call conversation',
+            ],
+          ),
+        ],
+      ),
+    ),
+
+    // Slot 2 (Meridian Health / Gil.inc)
+    NotificationItem(
+      title: 'Meeting confirmed',
+      message: 'Intro call with Sarah on July 22 at 4:15 PM ET. Tap to prep.',
+      footer: 'July 18 · Click to prepare',
+      time: 'July 18',
+      icon: Icons.calendar_today_rounded,
+      iconColor: const Color(0xFF7C5410),
+      bg: const Color(0xFFFBEAD5),
+      isPriority: true,
+      prospectSlot: 2,
+      detail: NotificationDetail(
+        headerLabel: 'NEXT MEETING · JULY 22 · 4:15 PM ET',
+        sections: const [
+          NotificationDetailSection(
+            icon: Icons.person_outline_rounded,
+            title: 'What Sarah already knows about you',
+            bullets: [
+              'Early-stage climate-tech venture, focused on scalable hardware solutions',
+              'Current banking needs: domestic operational setup and international vendor payments',
+            ],
+          ),
+          NotificationDetailSection(
+            icon: Icons.help_outline_rounded,
+            title: 'Questions to ask Sarah',
+            bullets: [
+              'Do you support multi-currency business accounts for overseas supplier bills?',
+              'What FX fees apply to high-volume cross-border wire transfers?',
+            ],
+          ),
+        ],
+      ),
+    ),
+    NotificationItem(
+      title: 'Call summary available',
+      message: 'July 14 call with Sarah. Topics, next steps, and new material added.',
+      footer: 'July 14 · Click to view',
+      time: 'July 14',
+      icon: Icons.call_outlined,
+      iconColor: const Color(0xFF0F6E56),
+      bg: const Color(0xFFE1F5EE),
+      isPriority: true,
+      prospectSlot: 2,
+      detail: NotificationDetail(
+        headerLabel: 'CALL SUMMARY · JULY 14',
+        sections: const [
+          NotificationDetailSection(
+            icon: Icons.summarize_outlined,
+            title: 'Key topics discussed',
+            bullets: [
+              'International wire setups, foreign exchange services, and risk mitigation',
+            ],
+          ),
+          NotificationDetailSection(
+            icon: Icons.next_plan_outlined,
+            title: 'Next steps agreed',
+            bullets: [
+              'Sarah to send international wire processing checklists by July 16',
+              'You to provide lists of target supplier countries and currencies',
+            ],
+          ),
+        ],
+      ),
+    ),
+    NotificationItem(
+      title: 'New guide added by Sarah',
+      message: 'Preparing for your first credit facility, based on your call.',
+      footer: 'July 15 · In your learning path',
+      time: 'July 15',
       icon: Icons.description_outlined,
       iconColor: const Color(0xFF5B55D9),
       bg: const Color(0xFFEEEDFE),
@@ -180,43 +336,11 @@ class NotificationService extends ChangeNotifier {
             bullets: [
               'Title: Preparing for your first credit facility',
               '10 min read · Series A · Capital structure',
-              'Added by Sarah Chen based on your Apr 29 call conversation',
-            ],
-          ),
-          NotificationDetailSection(
-            icon: Icons.checklist_rounded,
-            title: 'What you\'ll learn',
-            bullets: [
-              'When to start thinking about a credit facility',
-              'What documentation is typically required',
-              'How revolving credit lines differ from term loans',
-              'Key metrics lenders look at for seed-to-Series A companies',
+              'Added by Sarah Chen based on your July 14 call conversation',
             ],
           ),
         ],
       ),
-    ),
-    NotificationItem(
-      title: 'Meeting confirmed',
-      message: 'Intro call with Sarah on May 6 at 2:00 PM ET. Tap to prep.',
-      footer: 'Apr 28 · Click to prepare',
-      time: 'Apr 28',
-      icon: Icons.calendar_today_rounded,
-      iconColor: const Color(0xFF7C5410),
-      bg: const Color(0xFFFBEAD5),
-      isPriority: true,
-      prospectSlot: 1,
-    ),
-    NotificationItem(
-      title: 'Meeting confirmed',
-      message: 'Intro call with Sarah on May 6 at 2:00 PM ET. Tap to prep.',
-      footer: 'Apr 28 · Click to prepare',
-      time: 'Apr 28',
-      icon: Icons.calendar_today_rounded,
-      iconColor: const Color(0xFF7C5410),
-      bg: const Color(0xFFFBEAD5),
-      isPriority: true,
-      prospectSlot: 2,
     ),
   ];
 
@@ -280,6 +404,7 @@ class NotificationService extends ChangeNotifier {
   }
 
   void clearHistory() {
+    _activeHubNotifications.clear();
     _dropdownHistory.clear();
     notifyListeners();
   }

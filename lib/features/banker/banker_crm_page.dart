@@ -1217,11 +1217,10 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
                     ),
                   ),
                   if (() {
-                    final prospects = ref.read(bankerProspectsProvider);
-                    final pIdx = prospects.indexWhere((p) => p.id == prospect.id);
-                    if (pIdx < 0 || prospects.isEmpty) return false;
+                    final targetSlot = getSlotForProspectName(prospect.name);
+                    if (targetSlot == null) return false;
                     for (var item in _notifService.activeHubNotifications) {
-                      if (item.prospectSlot % prospects.length == pIdx) return true;
+                      if (item.prospectSlot == targetSlot) return true;
                     }
                     return false;
                   }())
@@ -4132,6 +4131,7 @@ class BankerCrmPage extends ConsumerStatefulWidget {
 class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
   // Selection and UI Filter State
   String _activeFilter = 'all'; // 'all', 'action', 'call', 'docs', 'done'
+  String _selectedStatusFilter = 'all'; // 'all', 'Waiting — no chat yet', 'Intro chat done', 'In conversation', 'Fully onboarded'
   String _searchQuery = '';
   String _sortColumn = 'Company';
   bool _sortAscending = true;
@@ -4173,6 +4173,19 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
       final matchesSearch = p.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           p.sector.toLowerCase().contains(_searchQuery.toLowerCase());
       if (!matchesSearch) return false;
+ 
+      if (_selectedStatusFilter != 'all') {
+        final statusLower = p.status.toLowerCase();
+        if (_selectedStatusFilter == 'Waiting — no chat yet') {
+          if (!statusLower.contains('waiting')) return false;
+        } else if (_selectedStatusFilter == 'Intro chat done') {
+          if (!statusLower.contains('intro chat done')) return false;
+        } else if (_selectedStatusFilter == 'In conversation') {
+          if (!statusLower.contains('in conversation')) return false;
+        } else if (_selectedStatusFilter == 'Fully onboarded') {
+          if (!statusLower.contains('fully onboarded')) return false;
+        }
+      }
 
       if (_activeFilter == 'all') return true;
       if (_activeFilter == 'action') {
@@ -4401,7 +4414,7 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
               ),
 
               // 2. TOOLBAR
-              _buildToolbar(isMobile),
+              _buildToolbar(isMobile, prospects),
 
               // 3. FULL-WIDTH TABLE REGION
               Expanded(
@@ -4654,9 +4667,15 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
     );
   }
 
-  Widget _buildToolbar(bool isMobile) {
+  Widget _buildToolbar(bool isMobile, List<CrmProspect> prospects) {
     final activeBanker = ref.watch(activeBankerProvider);
     final isManager = activeBanker?.role == 'manager';
+
+    final hasWaiting = prospects.any((p) => p.status.toLowerCase().contains('waiting'));
+    final hasIntro = prospects.any((p) => p.status.toLowerCase().contains('intro chat done'));
+    final hasConversation = prospects.any((p) => p.status.toLowerCase().contains('in conversation'));
+    final hasOnboarded = prospects.any((p) => p.status.toLowerCase().contains('fully onboarded'));
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       decoration: const BoxDecoration(
@@ -4669,8 +4688,10 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
         spacing: 12,
         runSpacing: 8,
         children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 6,
             children: [
               Container(
                 width: 200,
@@ -4698,6 +4719,12 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
+              _buildStatusChip('All', 'all'),
+              if (hasWaiting) _buildStatusChip('⏳ Waiting', 'Waiting — no chat yet'),
+              if (hasIntro) _buildStatusChip('✨ Intro Chat', 'Intro chat done'),
+              if (hasConversation) _buildStatusChip('💬 Conversation', 'In conversation'),
+              if (hasOnboarded) _buildStatusChip('✓ Onboarded', 'Fully onboarded'),
             ],
           ),
           Row(
@@ -4742,6 +4769,39 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
           child: Text(
             label,
             style: TextStyle(fontSize: 10, color: isOn ? Colors.white : BankerColors.muted, fontWeight: isOn ? FontWeight.bold : FontWeight.normal),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusChip(String label, String statusKey) {
+    final isOn = _selectedStatusFilter == statusKey;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedStatusFilter = statusKey;
+        });
+      },
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: isOn ? BankerColors.navy : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isOn ? BankerColors.navy : const Color(0xFFE2E8F0),
+              width: 1,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: isOn ? FontWeight.bold : FontWeight.normal,
+              color: isOn ? Colors.white : const Color(0xFF4A5568),
+            ),
           ),
         ),
       ),
@@ -4827,11 +4887,10 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                                             ),
                                           ),
                                           if (() {
-                                            final pIdx = prospects.indexWhere((p) => p.id == prospect.id);
-                                            if (pIdx < 0 || prospects.isEmpty) return false;
+                                            final targetSlot = getSlotForProspectName(prospect.name);
+                                            if (targetSlot == null) return false;
                                             for (var item in _notifService.activeHubNotifications) {
-                                              // Use prospectSlot for reliable matching
-                                              if (item.prospectSlot % prospects.length == pIdx) return true;
+                                              if (item.prospectSlot == targetSlot) return true;
                                             }
                                             return false;
                                           }())
@@ -6144,9 +6203,17 @@ class _BankerDetailPageState extends ConsumerState<BankerDetailPage> {
                 ProductCache.clear();
                 await ProspectStorage().clearProspectId();
                 if (context.mounted) {
-                  context.go('/');
+                   context.go('/');
                 }
               },
+            ),
+            NotificationsSection(
+              isBanker: true,
+              isDetailPage: true,
+              prospectName: prospect.name,
+              founderName: prospect.founderName,
+              bankerName: bankerName,
+              prospectsList: prospects,
             ),
             Expanded(
               child: isMobile

@@ -57,6 +57,7 @@ class ProspectInitResult {
   final String? bankerName;
   final String? bankerPosition;
   final String? lastSeenAt;
+  final Map<String, dynamic> aiAttributesHistorical;
 
   ProspectInitResult({
     required this.prospectId,
@@ -79,6 +80,7 @@ class ProspectInitResult {
     this.bankerName,
     this.bankerPosition,
     this.lastSeenAt,
+    this.aiAttributesHistorical = const {},
   });
 
   Map<String, dynamic> toDynamicVariables({bool lockProfileFields = false}) {
@@ -761,6 +763,11 @@ class ConversationService {
               confirmedStageUpdatedAt:
                   classificationData['confirmed_stage_updated_at'] as String?,
             ),
+      aiAttributesHistorical:
+          (data['ai_attributes_historical'] as Map?)?.map(
+                (key, value) => MapEntry(key.toString(), value),
+              ) ??
+          const {},
     );
   }
 

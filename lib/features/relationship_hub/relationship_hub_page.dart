@@ -156,10 +156,22 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
     }
   }
 
-  String get _companyName =>
-      _prospect?.companyName ??
-      widget.dynamicVariables['companyName']?.toString() ??
-      _defaultCompany;
+  /// Returns the latest company name — prefers the current value from
+  /// aiAttributesHistorical (which may be newer than the stored companyName).
+  String get _companyName {
+    // Try the historical AI attribute first to get the most recent name
+    final historical = _prospect?.aiAttributesHistorical;
+    if (historical != null && historical.containsKey('company_name')) {
+      final raw = historical['company_name'].toString();
+      // Strip the " (Previously: ...)" suffix if present
+      final prevIdx = raw.indexOf(' (Previously: ');
+      final latest = prevIdx != -1 ? raw.substring(0, prevIdx).trim() : raw.trim();
+      if (latest.isNotEmpty) return latest;
+    }
+    return _prospect?.companyName ??
+        widget.dynamicVariables['companyName']?.toString() ??
+        _defaultCompany;
+  }
 
   String get _founderName =>
       _prospect?.fullName ??
@@ -557,6 +569,18 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
 }
 
 
+int? getSlotForProspectName(String prospectName) {
+  final nameLower = prospectName.toLowerCase();
+  if (nameLower.contains('123') || nameLower.contains('vancouver')) {
+    return 1;
+  } else if (nameLower.contains('co1') || nameLower.contains('aster') || nameLower.contains('jumbo')) {
+    return 0;
+  } else if (nameLower.contains('gil') || nameLower.contains('meridian')) {
+    return 2;
+  }
+  return null;
+}
+
 CrmProspect getProspectForNotification(NotificationItem item, List<CrmProspect> prospects) {
   if (prospects.isEmpty) {
     return CrmProspect(
@@ -588,7 +612,12 @@ CrmProspect getProspectForNotification(NotificationItem item, List<CrmProspect> 
       notes: '',
     );
   }
-  // Use prospectSlot directly — reliable with real API data.
+  // Try to find the prospect that matches this slot
+  for (var p in prospects) {
+    if (getSlotForProspectName(p.name) == item.prospectSlot) {
+      return p;
+    }
+  }
   return prospects[item.prospectSlot % prospects.length];
 }
 
@@ -840,23 +869,25 @@ class _NotificationsSectionState extends State<_NotificationsSection> {
         if (widget.isDetailPage) {
           // Inside prospect detail page:
           // 1. Only show notifications belonging to this prospect slot
-          if (prospects.isNotEmpty && widget.prospectName != null) {
-            final prospectIndex = prospects.indexWhere((p) => p.name == widget.prospectName);
-            if (prospectIndex >= 0) {
-              final assignedIndex = item.prospectSlot % prospects.length;
-              if (assignedIndex != prospectIndex) continue;
-            }
+          if (widget.prospectName != null) {
+            final targetSlot = getSlotForProspectName(widget.prospectName!);
+            if (targetSlot == null || item.prospectSlot != targetSlot) continue;
           }
           // 2. Allow different kinds of notifications (do NOT filter out non-Meeting confirmed ones)
         } else {
           // On main Banker dashboard:
           // 1. Only show 'Meeting confirmed' in the top bar (one per prospect)
           if (item.title != 'Meeting confirmed') continue;
+          
+          final assignedSlot = item.prospectSlot;
+          final hasMatchingProspect = prospects.any((p) => getSlotForProspectName(p.name) == assignedSlot);
+          if (!hasMatchingProspect) continue;
         }
       } else {
         // Client view
-        if (activeIndexedItems.length >= 3) break;
       }
+
+      if (activeIndexedItems.length >= 3) break;
 
       String? pName = widget.prospectName;
       String? fName = widget.founderName;
@@ -1059,6 +1090,13 @@ class _HubMainColumnState extends ConsumerState<_HubMainColumn> {
 
   String _getMeetingDateString() {
     final dt = _scheduledCallDate ?? _defaultFutureDate;
+    final hasTime = dt.hour != 0 || dt.minute != 0;
+    if (hasTime) {
+      final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+      final minute = dt.minute.toString().padLeft(2, '0');
+      final ampm = dt.hour < 12 ? 'AM' : 'PM';
+      return '${_formatLongDate(dt)} · $hour:$minute $ampm ET · 30 min';
+    }
     return '${_formatLongDate(dt)} · 2:00 PM ET · 30 min';
   }
 
@@ -1075,7 +1113,15 @@ class _HubMainColumnState extends ConsumerState<_HubMainColumn> {
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ];
-    return '${months[dt.month - 1]} ${dt.day}';
+    final base = '${months[dt.month - 1]} ${dt.day}';
+    final hasTime = dt.hour != 0 || dt.minute != 0;
+    if (hasTime) {
+      final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+      final minute = dt.minute.toString().padLeft(2, '0');
+      final ampm = dt.hour < 12 ? 'AM' : 'PM';
+      return '$base, $hour:$minute $ampm';
+    }
+    return base;
   }
 
 
@@ -1088,11 +1134,23 @@ class _HubMainColumnState extends ConsumerState<_HubMainColumn> {
       firstDate: DateTime(now.year - 1),
       lastDate: DateTime(now.year + 5),
     );
-    if (picked != null) {
-      setState(() {
-        _scheduledCallDate = picked;
-      });
-    }
+    if (picked == null) return;
+
+    // After date is picked, immediately ask for time
+    if (!context.mounted) return;
+    final TimeOfDay? pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(now),
+      helpText: 'Select call time',
+    );
+
+    final scheduled = pickedTime != null
+        ? DateTime(picked.year, picked.month, picked.day, pickedTime.hour, pickedTime.minute)
+        : DateTime(picked.year, picked.month, picked.day);
+
+    setState(() {
+      _scheduledCallDate = scheduled;
+    });
   }
 
   void _unassignBanker() async {
@@ -1417,30 +1475,30 @@ class _HubMainColumnState extends ConsumerState<_HubMainColumn> {
                                   ],
                                 ),
                                 const SizedBox(height: 14),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: _MiniActionButton(
-                                        label: 'Message',
-                                        dark: true,
-                                        icon: Icons.chat_bubble_outline_rounded,
-                                        onTap: () {
-                                          widget.onMessageTap();
-                                        },
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: _MiniActionButton(
-                                        label: _scheduledCallDate != null
-                                            ? 'Sched: ${_formatDateShort(_scheduledCallDate!)}'
-                                            : 'Schedule',
-                                        dark: false,
-                                        onTap: () => _selectScheduleDate(context),
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                  Row(
+                                   children: [
+                                     Expanded(
+                                       child: _MiniActionButton(
+                                         label: 'Message',
+                                         dark: true,
+                                         icon: Icons.chat_bubble_outline_rounded,
+                                         onTap: () {
+                                           widget.onMessageTap();
+                                         },
+                                       ),
+                                     ),
+                                     const SizedBox(width: 8),
+                                     Expanded(
+                                       child: _MiniActionButton(
+                                         label: _scheduledCallDate != null
+                                             ? 'Sched: ${_formatDateShort(_scheduledCallDate!)}'
+                                             : 'Schedule',
+                                         dark: false,
+                                         onTap: () => _selectScheduleDate(context),
+                                       ),
+                                     ),
+                                   ],
+                                 ),
                               ],
                             ),
                           ),
@@ -3594,7 +3652,7 @@ class _MiniActionButton extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           decoration: BoxDecoration(
             color: dark ? AppThemeTokens.modalHeader : Colors.white,
             borderRadius: BorderRadius.circular(999),
@@ -3604,18 +3662,23 @@ class _MiniActionButton extends StatelessWidget {
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
               if (icon != null) ...[
                 Icon(icon,
-                    size: 15, color: dark ? Colors.white : const Color(0xFF1F2937)),
-                const SizedBox(width: 6),
+                    size: 13, color: dark ? Colors.white : const Color(0xFF1F2937)),
+                const SizedBox(width: 4),
               ],
-              Text(
-                label,
-                style: TextStyle(
-                  color: dark ? Colors.white : const Color(0xFF1F2937),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
+              Flexible(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: TextStyle(
+                    color: dark ? Colors.white : const Color(0xFF1F2937),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 10,
+                  ),
                 ),
               ),
             ],
@@ -4193,6 +4256,7 @@ class _LearningCard extends StatefulWidget {
 
 class _LearningCardState extends State<_LearningCard> {
   bool? _localHovered;
+  bool _badgeDismissed = false;
   bool get _isHovered => _localHovered ?? widget.defaultHover;
 
   @override
@@ -4205,7 +4269,13 @@ class _LearningCardState extends State<_LearningCard> {
       onExit: (_) => setState(() => _localHovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: widget.onTap,
+        onTap: () {
+          // Dismiss the New badge on first tap
+          if (widget.showNewBadge && !_badgeDismissed) {
+            setState(() => _badgeDismissed = true);
+          }
+          widget.onTap?.call();
+        },
         child: Stack(
           clipBehavior: Clip.none,
           children: [
@@ -4297,7 +4367,7 @@ class _LearningCardState extends State<_LearningCard> {
         ),
       ),
     ),
-    if (widget.showNewBadge)
+    if (widget.showNewBadge && !_badgeDismissed)
       Positioned(
         top: 12,
         right: 12,
@@ -4372,6 +4442,18 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
   bool _isVoiceTriggerHovered = false;
   bool _isFetchingToken = false;
 
+  final ScrollController _teamScrollController = ScrollController();
+  bool _canScrollLeft = false;
+  bool _canScrollRight = true;
+
+  void _updateScrollButtons() {
+    if (!mounted) return;
+    setState(() {
+      _canScrollLeft = _teamScrollController.offset > 5;
+      _canScrollRight = _teamScrollController.offset < (_teamScrollController.position.maxScrollExtent - 5);
+    });
+  }
+
   bool get _isReturnVisit => (_profile?.conversationCount ?? 0) > 0 || (_profile?.conversationPhase ?? 1) > 1;
 
   @override
@@ -4385,12 +4467,15 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
     _pulseAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeOut),
     );
+    _teamScrollController.addListener(_updateScrollButtons);
     _loadProfile();
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
+    _teamScrollController.removeListener(_updateScrollButtons);
+    _teamScrollController.dispose();
     super.dispose();
   }
 
@@ -4477,7 +4562,16 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            widget.companyName,
+                            () {
+                              final historical = _profile?.aiAttributesHistorical;
+                              if (historical != null && historical.containsKey('company_name')) {
+                                final raw = historical['company_name'].toString();
+                                final prevIdx = raw.indexOf(' (Previously: ');
+                                final latest = prevIdx != -1 ? raw.substring(0, prevIdx).trim() : raw.trim();
+                                if (latest.isNotEmpty) return latest;
+                              }
+                              return _profile?.companyName ?? widget.companyName;
+                            }(),
                             style: const TextStyle(
                               color: Color(0xFFB99C4C),
                               fontSize: 13,
@@ -4595,13 +4689,33 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
     final firstFormRows = [
       _buildRow('Email', _profile!.email),
       _buildRow('Phone', _profile!.phoneNumber),
-      _buildRow('Company', _profile!.companyName),
+      _buildRow(
+        'Company',
+        () {
+          final historical = _profile?.aiAttributesHistorical;
+          if (historical != null && historical.containsKey('company_name')) {
+            final raw = historical['company_name'].toString();
+            final prevIdx = raw.indexOf(' (Previously: ');
+            final latest = prevIdx != -1 ? raw.substring(0, prevIdx).trim() : raw.trim();
+            if (latest.isNotEmpty) return latest;
+          }
+          return _profile?.companyName ?? widget.companyName;
+        }(),
+      ),
       _buildRow('Conversations', '${_profile!.conversationCount}'),
     ];
 
-    final aiAttributesHistorical = _profile!.aiAttributesHistorical.isNotEmpty
+    // Keys that are already displayed in the manual sections above — exclude
+    // them from the AI-collected table to avoid duplication.
+    const _excludedAiKeys = {'company_name', 'is_post_incorporated', 'incorporated'};
+
+    final rawHistorical = _profile!.aiAttributesHistorical.isNotEmpty
         ? _profile!.aiAttributesHistorical
         : _profile!.aiAttributes;
+
+    final aiAttributesHistorical = Map<String, dynamic>.fromEntries(
+      rawHistorical.entries.where((e) => !_excludedAiKeys.contains(e.key)),
+    );
 
     if (widget.isBanker) {
       return Column(
@@ -4785,24 +4899,75 @@ class _ProspectProfileModalState extends State<ProspectProfileModal> with Single
     );
   }
 
+
+
   Widget _buildTeamSection() {
     return Container(
-      padding: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: _buildSectionTitle('TEAM MEMBERS'),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildSectionTitle('TEAM MEMBERS'),
+                if (_mockTeam.length > 3)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          Icons.chevron_left_rounded,
+                          color: _canScrollLeft ? const Color(0xFF8D8578) : const Color(0xFFD1CFC9),
+                          size: 20,
+                        ),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: !_canScrollLeft
+                            ? null
+                            : () {
+                                _teamScrollController.animateTo(
+                                  0,
+                                  duration: const Duration(milliseconds: 300),
+                                  curve: Curves.easeInOut,
+                                );
+                              },
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: Icon(
+                          Icons.chevron_right_rounded,
+                          color: _canScrollRight ? const Color(0xFF8D8578) : const Color(0xFFD1CFC9),
+                          size: 20,
+                        ),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: !_canScrollRight
+                            ? null
+                            : () {
+                                _teamScrollController.animateTo(
+                                  _teamScrollController.position.maxScrollExtent,
+                                  duration: const Duration(milliseconds: 300),
+                                  curve: Curves.easeInOut,
+                                );
+                              },
+                      ),
+                    ],
+                  ),
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 6),
           SizedBox(
-            height: 80,
+            height: 75,
             child: ListView.separated(
+              controller: _teamScrollController,
               padding: const EdgeInsets.symmetric(horizontal: 24),
               scrollDirection: Axis.horizontal,
               itemCount: _mockTeam.length,
-              separatorBuilder: (ctx, i) => const SizedBox(width: 16),
+              separatorBuilder: (ctx, i) => const SizedBox(width: 12),
               itemBuilder: (ctx, i) => _TeamMemberCard(member: _mockTeam[i]),
             ),
           ),
@@ -5319,6 +5484,7 @@ class _ProductDetailModalState extends State<_ProductDetailModal> {
                 if (product.features.isNotEmpty)
                   _buildDropdownSection(
                     title: 'KEY FEATURES',
+                    initiallyExpanded: true,
                     content: _buildColumnList(product.features.map((f) => f.toString()).toList()),
                   ),
                 if (product.benefits.isNotEmpty)

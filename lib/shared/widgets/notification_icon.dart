@@ -187,13 +187,17 @@ class _NotificationDropdownState extends State<_NotificationDropdown> {
 
   @override
   Widget build(BuildContext context) {
-    final rawList = widget.notifService.activeHubNotifications;
-    final localizedList = rawList.map((item) {
+    final activeRaw = widget.notifService.activeHubNotifications;
+    final historyRaw = widget.notifService.dropdownHistory;
+
+    final localizedActive = activeRaw.map((item) {
       String? pName;
       String? fName;
       if (widget.prospects.isNotEmpty) {
-        final index = item.prospectSlot % widget.prospects.length;
-        final p = widget.prospects[index];
+        final p = widget.prospects.firstWhere(
+          (prosp) => getSlotForProspectName(prosp.name) == item.prospectSlot,
+          orElse: () => widget.prospects[item.prospectSlot % widget.prospects.length],
+        );
         pName = p.name;
         fName = p.founderName;
       }
@@ -205,6 +209,28 @@ class _NotificationDropdownState extends State<_NotificationDropdown> {
         founderName: fName,
       );
     }).toList();
+
+    final localizedHistory = historyRaw.map((item) {
+      String? pName;
+      String? fName;
+      if (widget.prospects.isNotEmpty) {
+        final p = widget.prospects.firstWhere(
+          (prosp) => getSlotForProspectName(prosp.name) == item.prospectSlot,
+          orElse: () => widget.prospects[item.prospectSlot % widget.prospects.length],
+        );
+        pName = p.name;
+        fName = p.founderName;
+      }
+      return localizeNotification(
+        item,
+        'Sarah Chen',
+        isBanker: true,
+        prospectName: pName,
+        founderName: fName,
+      );
+    }).toList();
+
+    final localizedList = [...localizedActive, ...localizedHistory];
 
     final visible = _viewAll ? localizedList : localizedList.take(5).toList();
 
