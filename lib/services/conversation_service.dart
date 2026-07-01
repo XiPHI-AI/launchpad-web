@@ -1190,6 +1190,27 @@ class ConversationService {
     return ProspectDocument.fromJson(response.data as Map<String, dynamic>);
   }
 
+  Future<ProspectDocument> uploadProspectDocumentFile(
+    String prospectId,
+    String fileName,
+    List<int> fileBytes,
+  ) async {
+    final formData = FormData.fromMap({
+      'file': MultipartFile.fromBytes(fileBytes, filename: fileName),
+    });
+    final response = await _dio.post(
+      '${ApiConfig.baseUrl}/conversations/prospect/$prospectId/document/upload',
+      data: formData,
+    );
+    return ProspectDocument.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<void> deleteProspectDocument(String documentId) async {
+    await _dio.delete(
+      '${ApiConfig.baseUrl}/conversations/document/$documentId',
+    );
+  }
+
   Future<List<ProspectCheckpoint>> getDocumentCheckpoints(String documentId) async {
     final response = await _dio.get(
       '${ApiConfig.baseUrl}/conversations/document/$documentId/checkpoints',

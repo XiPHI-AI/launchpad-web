@@ -1051,6 +1051,7 @@ class _HubMainColumnState extends ConsumerState<_HubMainColumn> {
   bool _showAllProducts = false;
   List<ProspectDocument> _documents = [];
   bool _loadingDocs = false;
+  bool _isEditingDocs = false;
 
   @override
   void initState() {
@@ -1196,23 +1197,27 @@ class _HubMainColumnState extends ConsumerState<_HubMainColumn> {
   }
 
   void _showUploadModal(BuildContext context) {
-    showDialog<String>(
+    showDialog<Map<String, dynamic>>(
       context: context,
       builder: (_) => const _UploadDocModal(),
-    ).then((fileName) async {
-      if (fileName != null && fileName.isNotEmpty) {
+    ).then((result) async {
+      if (result != null && result is Map) {
+        final fileName = result['name'] as String;
+        final fileBytes = result['bytes'] as List<int>;
         if (widget.prospectId != null) {
+          setState(() => _loadingDocs = true);
           try {
-            final mockLink = 'https://drive.google.com/open?id=uploaded_${DateTime.now().millisecondsSinceEpoch}';
-            final newDoc = await ConversationService().uploadProspectDocument(
+            final newDoc = await ConversationService().uploadProspectDocumentFile(
               widget.prospectId!,
               fileName,
-              driveLink: mockLink,
+              fileBytes,
             );
             setState(() {
               _documents.add(newDoc);
+              _loadingDocs = false;
             });
           } catch (e) {
+            setState(() => _loadingDocs = false);
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('Failed to upload "$fileName": $e'),
@@ -1231,6 +1236,49 @@ class _HubMainColumnState extends ConsumerState<_HubMainColumn> {
         );
       }
     });
+  }
+
+  Future<void> _deleteDocument(ProspectDocument doc) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Document'),
+        content: Text('Are you sure you want to permanently delete "${doc.fileName}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await ConversationService().deleteProspectDocument(doc.documentId);
+        setState(() {
+          _documents.removeWhere((d) => d.documentId == doc.documentId);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('"${doc.fileName}" deleted successfully.'),
+            backgroundColor: const Color(0xFF0F6E56),
+          ),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete "${doc.fileName}": $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   IconData _getIconForCategory(String category) {
@@ -1733,6 +1781,36 @@ class _HubMainColumnState extends ConsumerState<_HubMainColumn> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
+                const SizedBox(width: 12),
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _isEditingDocs = !_isEditingDocs;
+                    });
+                  },
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _isEditingDocs ? const Color(0xFFFEF2F2) : const Color(0xFFF4F2EE),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: _isEditingDocs ? Colors.red.shade200 : const Color(0xFFE1D9CB),
+                          width: 1,
+                        ),
+                      ),
+                      child: Text(
+                        _isEditingDocs ? 'Done' : 'Edit',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: _isEditingDocs ? Colors.red.shade700 : const Color(0xFF4B5563),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
                 const Spacer(),
                 _AddDocChip(
                   onTap: () => _showUploadModal(context),
@@ -1758,6 +1836,8 @@ class _HubMainColumnState extends ConsumerState<_HubMainColumn> {
                       return _DocChip(
                         doc.fileName,
                         'Shared',
+                        isEditing: _isEditingDocs,
+                        onDelete: () => _deleteDocument(doc),
                         onTap: () {
                           if (doc.driveLink != null && doc.driveLink!.isNotEmpty) {
                             html.window.open(doc.driveLink!, '_blank');
@@ -3735,17 +3815,25 @@ class _DocChip extends StatelessWidget {
   final String label;
   final String status;
   final VoidCallback? onTap;
+  final bool isEditing;
+  final VoidCallback? onDelete;
 
-  const _DocChip(this.label, this.status, {this.onTap});
+  const _DocChip(
+    this.label,
+    this.status, {
+    this.onTap,
+    this.isEditing = false,
+    this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
     final isShared = status == 'Shared';
     final isReview = status == 'Needs review';
     return MouseRegion(
-      cursor: onTap != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      cursor: (isEditing ? onDelete != null : onTap != null) ? SystemMouseCursors.click : SystemMouseCursors.basic,
       child: GestureDetector(
-        onTap: onTap,
+        onTap: isEditing ? null : onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
@@ -3781,6 +3869,20 @@ class _DocChip extends StatelessWidget {
                   ),
                 ),
               ),
+              if (isEditing && onDelete != null) ...[
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: onDelete,
+                  child: const MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Icon(
+                      Icons.cancel_rounded,
+                      size: 16,
+                      color: Colors.red,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -6408,6 +6510,7 @@ class _UploadDocModalState extends State<_UploadDocModal> {
   int? _fileSize;
   bool _isDragging = false;
   bool _isUploading = false;
+  List<int>? _selectedFileBytes;
   
   StreamSubscription? _dragOverSub;
   StreamSubscription? _dragLeaveSub;
@@ -6445,7 +6548,21 @@ class _UploadDocModalState extends State<_UploadDocModal> {
       }
       if (event.dataTransfer.files != null && event.dataTransfer.files!.isNotEmpty) {
         final file = event.dataTransfer.files!.first;
-        _handleFileSelected(file.name, file.size);
+        if (file.name.toLowerCase().endsWith('.pdf')) {
+          final reader = html.FileReader();
+          reader.readAsArrayBuffer(file);
+          reader.onLoadEnd.listen((e) {
+            _selectedFileBytes = reader.result as List<int>;
+            _handleFileSelected(file.name, file.size);
+          });
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Only PDF files are allowed.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     });
   }
@@ -6467,12 +6584,26 @@ class _UploadDocModalState extends State<_UploadDocModal> {
 
   void _triggerFilePicker() {
     final input = html.InputElement(type: 'file');
-    input.accept = '.pdf,.docx,.xlsx,.xls,.png,.jpg,.jpeg';
+    input.accept = '.pdf';
     input.click();
     input.onChange.listen((event) {
       if (input.files != null && input.files!.isNotEmpty) {
         final file = input.files!.first;
-        _handleFileSelected(file.name, file.size);
+        if (file.name.toLowerCase().endsWith('.pdf')) {
+          final reader = html.FileReader();
+          reader.readAsArrayBuffer(file);
+          reader.onLoadEnd.listen((e) {
+            _selectedFileBytes = reader.result as List<int>;
+            _handleFileSelected(file.name, file.size);
+          });
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Only PDF files are allowed.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     });
   }
@@ -6610,7 +6741,7 @@ class _UploadDocModalState extends State<_UploadDocModal> {
                               ),
                               const SizedBox(height: 6),
                               const Text(
-                                'Supports PDF, DOCX, XLSX up to 50MB',
+                                'Supports PDF up to 50MB',
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: Color(0xFF8D8578),
@@ -6673,6 +6804,7 @@ class _UploadDocModalState extends State<_UploadDocModal> {
                                 setState(() {
                                   _fileName = null;
                                   _fileSize = null;
+                                  _selectedFileBytes = null;
                                 });
                               },
                             ),
@@ -6699,7 +6831,10 @@ class _UploadDocModalState extends State<_UploadDocModal> {
                                   setState(() => _isUploading = true);
                                   await Future.delayed(const Duration(milliseconds: 600));
                                   if (mounted) {
-                                    Navigator.of(context).pop(_fileName);
+                                    Navigator.of(context).pop({
+                                      'name': _fileName,
+                                      'bytes': _selectedFileBytes,
+                                    });
                                   }
                                 },
                           style: FilledButton.styleFrom(
