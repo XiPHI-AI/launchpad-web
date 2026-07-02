@@ -95,35 +95,44 @@ jobs:
             # so API_BASE_URL is correctly injected as a Docker build arg
             docker compose -p launchpad_demo -f docker-compose.demo.yml --env-file .env.demo build --no-cache --progress=plain web
 
-            # Force remove the old web container to avoid naming conflicts
-            docker rm -f demo_launchpad_web 2>/dev/null || true
+            # Capture the ID of the currently running web container (if any)
+            old_container_id=$(docker ps -q --filter "name=demo_launchpad_web" || true)
 
-            # Remove stale web containers safely before bringing up the new one.
-            # Some environments prepend random/hash prefixes to container names,
-            # e.g. "8aac..._demo_launchpad_web", so match by name substring.
-            stale_web_ids=$(docker ps -aq --filter "name=demo_launchpad_web")
-            if [ -n "$stale_web_ids" ]; then
-              docker rm -f $stale_web_ids || true
+            echo "⚡ Recreating web container..."
+            # Recreate and start the new container. 
+            # If this fails, roll back to starting the old container immediately.
+            if ! docker compose -p launchpad_demo -f docker-compose.demo.yml --env-file .env.demo up -d web; then
+              echo "⚠️ Docker compose up failed! Rolling back..."
+              if [ -n "$old_container_id" ]; then
+                docker start "$old_container_id" || true
+              fi
+              exit 1
             fi
 
-            # Start web with the newly built image
-            docker compose -p launchpad_demo -f docker-compose.demo.yml --env-file .env.demo up -d web
-
-            # Clean up dangling images
-            # Remove dangling images AND stale build cache to free disk space
-            docker image prune -f
-            docker builder prune -f
-
-            # Health check with retries: container may need a few seconds
-            # to become ready after recreation.
+            echo "🔍 Performing health checks on new container..."
+            # Perform health check on the new container with retries
+            passed=false
             for i in {1..20}; do
               if curl -fsS http://localhost:9010/health > /dev/null; then
-                echo "Web health check passed"
-                exit 0
+                echo "✅ Web health check passed successfully!"
+                passed=true
+                break
               fi
               echo "Waiting for web health... attempt $i/20"
               sleep 3
             done
 
-            echo "Web health check failed after retries"
-            exit 1
+            # If health checks fail, stop the new container and start the old one back up.
+            if [ "$passed" = false ]; then
+              echo "❌ Health check failed! Rolling back to the previous container..."
+              docker compose -p launchpad_demo -f docker-compose.demo.yml --env-file .env.demo stop web || true
+              if [ -n "$old_container_id" ]; then
+                docker start "$old_container_id" || true
+              fi
+              exit 1
+            fi
+
+            # Only clean up dangling images and cache on successful deploy
+            echo "🧹 Cleaning up dangling images and build cache..."
+            docker image prune -f
+            docker builder prune -f
