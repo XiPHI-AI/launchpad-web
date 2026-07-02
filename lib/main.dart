@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 
 import 'core/auth/auth_provider.dart';
+import 'core/branding/branding_provider.dart';
 import 'router/app_router.dart';
 import 'shared/widgets/demo_banner.dart';
 import 'theme/app_theme.dart';
@@ -48,6 +49,7 @@ class _LaunchPadAppState extends ConsumerState<LaunchPadApp> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(bankNamesProvider);
     // Drive GoRouter refresh whenever auth state changes.
     // ref.listen is safe here — called during build.
     ref.listen<bool>(isAuthenticatedProvider, (_, __) {

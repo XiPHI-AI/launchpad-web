@@ -333,9 +333,9 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
     final branding = ref.watch(brandingProvider);
     final filteredProducts = _products.where((p) {
       if (branding == BrandingMode.myBank) {
-        return p.bankName?.toLowerCase() == 'my_bank';
+        return p.bankId == '11111111-1111-1111-1111-111111111111';
       } else {
-        return p.bankName == null || p.bankName!.isEmpty || p.bankName!.toLowerCase() == 'jpmc';
+        return p.bankId == null || p.bankId!.isEmpty || p.bankId == '22222222-2222-2222-2222-222222222222';
       }
     }).toList();
 
@@ -1207,10 +1207,13 @@ class _HubMainColumnState extends ConsumerState<_HubMainColumn> {
         if (widget.prospectId != null) {
           setState(() => _loadingDocs = true);
           try {
+            final branding = ref.read(brandingProvider);
+            final bankNameCode = branding == BrandingMode.myBank ? 'my_bank' : 'jpmc';
             final newDoc = await ConversationService().uploadProspectDocumentFile(
               widget.prospectId!,
               fileName,
               fileBytes,
+              bankNameCode,
             );
             setState(() {
               _documents.add(newDoc);
@@ -1310,6 +1313,15 @@ class _HubMainColumnState extends ConsumerState<_HubMainColumn> {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
+    final branding = ref.watch(brandingProvider);
+    final filteredDocs = _documents.where((doc) {
+      if (branding == BrandingMode.myBank) {
+        return doc.bankName?.toLowerCase() == 'my_bank';
+      } else {
+        return doc.bankName == null || doc.bankName!.isEmpty || doc.bankName!.toLowerCase() == 'jpmc';
+      }
+    }).toList();
+
     final isDesktop = screenWidth >= 1180;
     final isMobile = screenWidth < 768;
 
@@ -1832,7 +1844,7 @@ class _HubMainColumnState extends ConsumerState<_HubMainColumn> {
                 : Wrap(
                     spacing: 10,
                     runSpacing: 10,
-                    children: _documents.map((doc) {
+                    children: filteredDocs.map((doc) {
                       return _DocChip(
                         doc.fileName,
                         'Shared',
@@ -2047,7 +2059,7 @@ class _HubMainColumnState extends ConsumerState<_HubMainColumn> {
   }
 }
 
-class _AiGuidePanel extends StatefulWidget {
+class _AiGuidePanel extends ConsumerStatefulWidget {
   final String? prospectId;
   final String? bankerId;
   final String founderName;
@@ -2089,10 +2101,10 @@ class _AiGuidePanel extends StatefulWidget {
   });
 
   @override
-  State<_AiGuidePanel> createState() => _AiGuidePanelState();
+  ConsumerState<_AiGuidePanel> createState() => _AiGuidePanelState();
 }
 
-class _AiGuidePanelState extends State<_AiGuidePanel> {
+class _AiGuidePanelState extends ConsumerState<_AiGuidePanel> {
   final ConversationService _service = ConversationService();
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
@@ -2399,6 +2411,10 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
     _scrollToBottom();
 
     try {
+      final branding = ref.read(brandingProvider);
+      final bankIdCode = branding == BrandingMode.myBank
+          ? '11111111-1111-1111-1111-111111111111'
+          : '22222222-2222-2222-2222-222222222222';
       final result = await _service.sendRelationshipHubChat(
         trimmed,
         prospectId: widget.prospectId,
@@ -2411,6 +2427,7 @@ class _AiGuidePanelState extends State<_AiGuidePanel> {
           if (widget.bankerId != null) 'banker_id': widget.bankerId,
         },
         isBanker: widget.customActionLabel == 'Prospect Chats',
+        bankId: bankIdCode,
       );
 
       if (!mounted) return;

@@ -217,6 +217,7 @@ class ProductPublic {
   final List<String> benefits;
   final String? integrationInfo;
   final String? signupUrl;
+  final String? bankId;
   final String? bankName;
   final double? matchScore;
   final String? matchReasoning;
@@ -239,6 +240,7 @@ class ProductPublic {
     this.benefits = const [],
     this.integrationInfo,
     this.signupUrl,
+    this.bankId,
     this.bankName,
     this.matchScore,
     this.matchReasoning,
@@ -264,6 +266,7 @@ class ProductPublic {
       benefits: List<String>.from(json['benefits'] ?? []),
       integrationInfo: json['integration_info'] as String?,
       signupUrl: json['signup_url'] as String?,
+      bankId: json['bank_id'] as String?,
       bankName: json['bank_name'] as String?,
       matchScore: (json['match_score'] as num?)?.toDouble(),
       matchReasoning: json['match_reasoning'] as String?,
@@ -443,6 +446,8 @@ class ProspectDocument {
   final String? previousVersionDocumentId;
   final String? driveLink;
   final DateTime uploadedAt;
+  final String? bankId;
+  final String? bankName;
 
   const ProspectDocument({
     required this.documentId,
@@ -455,6 +460,8 @@ class ProspectDocument {
     this.previousVersionDocumentId,
     this.driveLink,
     required this.uploadedAt,
+    this.bankId,
+    this.bankName,
   });
 
   factory ProspectDocument.fromJson(Map<String, dynamic> json) {
@@ -469,6 +476,8 @@ class ProspectDocument {
       previousVersionDocumentId: json['previous_version_document_id'] as String?,
       driveLink: json['drive_link'] as String?,
       uploadedAt: DateTime.parse(json['uploaded_at'] as String).toLocal(),
+      bankId: json['bank_id'] as String?,
+      bankName: json['bank_name'] as String?,
     );
   }
 }
@@ -842,6 +851,7 @@ class ConversationService {
     String? prospectId,
     Map<String, dynamic> context = const {},
     bool isBanker = false,
+    String? bankId,
   }) async {
     final response = await _dio.post(
       '${ApiConfig.baseUrl}/conversations/relationship-hub/chat',
@@ -850,6 +860,7 @@ class ConversationService {
         if (prospectId != null) 'prospect_id': prospectId,
         'context': context,
         'is_banker': isBanker,
+        if (bankId != null) 'bank_id': bankId,
       },
     );
     final data = response.data as Map<String, dynamic>;
@@ -860,6 +871,18 @@ class ConversationService {
           ) ??
           const {},
     );
+  }
+
+  Future<List<Map<String, String>>> getBanks() async {
+    final response = await _dio.get('${ApiConfig.baseUrl}/conversations/banks');
+    final list = response.data as List;
+    return list.map((item) {
+      final map = item as Map<String, dynamic>;
+      return {
+        'bank_id': map['bank_id'] as String,
+        'bank_name': map['bank_name'] as String,
+      };
+    }).toList();
   }
 
   /// Fetches profile form data plus the latest AI-collected attribute list.
@@ -1194,9 +1217,11 @@ class ConversationService {
     String prospectId,
     String fileName,
     List<int> fileBytes,
+    String bankName,
   ) async {
     final formData = FormData.fromMap({
       'file': MultipartFile.fromBytes(fileBytes, filename: fileName),
+      'bank_name': bankName,
     });
     final response = await _dio.post(
       '${ApiConfig.baseUrl}/conversations/prospect/$prospectId/document/upload',
