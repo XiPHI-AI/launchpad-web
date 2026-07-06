@@ -271,7 +271,7 @@ class BankerProspectsNotifier extends StateNotifier<List<CrmProspect>> {
 
   Future<void> loadProspects() async {
     try {
-      final list = await ConversationService().listProspects();
+      final list = await ConversationService().listProspects(bankId: dynamicMyBankId);
       state = list.map((r) => _mapToCrmProspect(r)).toList();
     } catch (e) {
       print("Failed to load prospects from database: $e");
@@ -938,7 +938,7 @@ class BankerProspectsNotifier extends StateNotifier<List<CrmProspect>> {
 }
 
 final bankersProvider = FutureProvider<List<Banker>>((ref) async {
-  return await ConversationService().listBankers();
+  return await ConversationService().listBankers(bankId: dynamicMyBankId);
 });
 
 final activeBankerProvider = StateProvider<Banker?>((ref) {
@@ -4730,7 +4730,7 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (isManager)
+              if (isManager) ...[
                 ElevatedButton(
                   onPressed: _showAssignProspectDialog,
                   style: ElevatedButton.styleFrom(
@@ -4742,6 +4742,19 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                   ),
                   child: const Text('+ Assign Prospect', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                 ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _showCreateBankerDialog,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: BankerColors.navy,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: const Text('+ Create Banker', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                ),
+              ],
             ],
           ),
         ],
@@ -5177,6 +5190,228 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
     );
   }
 
+  void _showCreateBankerDialog() {
+    final nameController = TextEditingController();
+    final emailController = TextEditingController();
+    final positionController = TextEditingController();
+    bool isSaving = false;
+    String? errorMessage;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            Future<void> handleCreate() async {
+              final name = nameController.text.trim();
+              final email = emailController.text.trim();
+              final position = positionController.text.trim();
+
+              if (name.isEmpty || email.isEmpty || position.isEmpty) {
+                setModalState(() {
+                  errorMessage = 'All fields are required.';
+                });
+                return;
+              }
+
+              setModalState(() {
+                isSaving = true;
+                errorMessage = null;
+              });
+
+              try {
+                await ConversationService().createBanker(
+                  name,
+                  email,
+                  position,
+                  dynamicMyBankId,
+                );
+                
+                ref.invalidate(bankersProvider);
+
+                Navigator.of(dialogContext).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Successfully created banker $name.')),
+                );
+              } catch (e) {
+                setModalState(() {
+                  isSaving = false;
+                  errorMessage = e.toString().replaceAll('Exception:', '').trim();
+                });
+              }
+            }
+
+            return Dialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Container(
+                width: 440,
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.person_add_rounded, color: BankerColors.navy, size: 22),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            'Create New Banker',
+                            style: TextStyle(
+                              fontFamily: 'DM Serif Display',
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: BankerColors.ink,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 20, color: BankerColors.muted),
+                          onPressed: () => Navigator.of(dialogContext).pop(),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Enter the credentials and title of the new banker. They will belong to this bank branch.',
+                      style: TextStyle(fontSize: 12, color: BankerColors.muted, height: 1.4),
+                    ),
+                    const SizedBox(height: 20),
+                    if (errorMessage != null) ...[
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF2F2),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFFFCA5A5)),
+                        ),
+                        child: Text(
+                          errorMessage!,
+                          style: const TextStyle(fontSize: 11, color: Color(0xFF991B1B), fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    const Text(
+                      'FULL NAME',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: BankerColors.muted2, letterSpacing: 0.5),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: BankerColors.cream,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: BankerColors.line2),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: TextField(
+                        controller: nameController,
+                        style: const TextStyle(fontSize: 12, color: BankerColors.ink),
+                        decoration: const InputDecoration(
+                          hintText: 'John Doe',
+                          hintStyle: TextStyle(color: BankerColors.muted2, fontSize: 12),
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(vertical: 10),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'EMAIL ADDRESS',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: BankerColors.muted2, letterSpacing: 0.5),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: BankerColors.cream,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: BankerColors.line2),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: TextField(
+                        controller: emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        style: const TextStyle(fontSize: 12, color: BankerColors.ink),
+                        decoration: const InputDecoration(
+                          hintText: 'john.doe@bank.com',
+                          hintStyle: TextStyle(color: BankerColors.muted2, fontSize: 12),
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(vertical: 10),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'POSITION / TITLE',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: BankerColors.muted2, letterSpacing: 0.5),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: BankerColors.cream,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: BankerColors.line2),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: TextField(
+                        controller: positionController,
+                        style: const TextStyle(fontSize: 12, color: BankerColors.ink),
+                        decoration: const InputDecoration(
+                          hintText: 'Managing Director / VP / Associate',
+                          hintStyle: TextStyle(color: BankerColors.muted2, fontSize: 12),
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(vertical: 10),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: isSaving ? null : () => Navigator.of(dialogContext).pop(),
+                          style: TextButton.styleFrom(
+                            foregroundColor: BankerColors.muted,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          ),
+                          child: const Text('Cancel', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: isSaving ? null : handleCreate,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: BankerColors.navy,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          child: isSaving
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Text('Create Banker', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showAssignProspectDialog() {
     final activeBanker = ref.read(activeBankerProvider);
     if (activeBanker == null) return;
@@ -5193,7 +5428,7 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
           builder: (ctx, setModalState) {
             // Load unassigned prospects once on first build
             if (_loading && _unassigned.isEmpty) {
-              ConversationService().getUnassignedProspects().then((list) {
+              ConversationService().getUnassignedProspects(bankId: dynamicMyBankId).then((list) {
                 setModalState(() {
                   _unassigned = list;
                   _loading = false;

@@ -333,9 +333,9 @@ class _RelationshipHubPageState extends ConsumerState<RelationshipHubPage> {
     final branding = ref.watch(brandingProvider);
     final filteredProducts = _products.where((p) {
       if (branding == BrandingMode.myBank) {
-        return p.bankId == '11111111-1111-1111-1111-111111111111';
+        return p.bankId == dynamicMyBankId;
       } else {
-        return p.bankId == null || p.bankId!.isEmpty || p.bankId == '22222222-2222-2222-2222-222222222222';
+        return p.bankId == null || p.bankId!.isEmpty || p.bankId == dynamicJpmcId;
       }
     }).toList();
 
@@ -1316,9 +1316,9 @@ class _HubMainColumnState extends ConsumerState<_HubMainColumn> {
     final branding = ref.watch(brandingProvider);
     final filteredDocs = _documents.where((doc) {
       if (branding == BrandingMode.myBank) {
-        return doc.bankName?.toLowerCase() == 'my_bank';
+        return doc.bankId == dynamicMyBankId;
       } else {
-        return doc.bankName == null || doc.bankName!.isEmpty || doc.bankName!.toLowerCase() == 'jpmc';
+        return doc.bankId == null || doc.bankId!.isEmpty || doc.bankId == dynamicJpmcId;
       }
     }).toList();
 
@@ -1793,36 +1793,38 @@ class _HubMainColumnState extends ConsumerState<_HubMainColumn> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(width: 12),
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _isEditingDocs = !_isEditingDocs;
-                    });
-                  },
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: _isEditingDocs ? const Color(0xFFFEF2F2) : const Color(0xFFF4F2EE),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: _isEditingDocs ? Colors.red.shade200 : const Color(0xFFE1D9CB),
-                          width: 1,
+                if (filteredDocs.isNotEmpty) ...[
+                  const SizedBox(width: 12),
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _isEditingDocs = !_isEditingDocs;
+                      });
+                    },
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _isEditingDocs ? const Color(0xFFFEF2F2) : const Color(0xFFF4F2EE),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: _isEditingDocs ? Colors.red.shade200 : const Color(0xFFE1D9CB),
+                            width: 1,
+                          ),
                         ),
-                      ),
-                      child: Text(
-                        _isEditingDocs ? 'Done' : 'Edit',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: _isEditingDocs ? Colors.red.shade700 : const Color(0xFF4B5563),
+                        child: Text(
+                          _isEditingDocs ? 'Done' : 'Edit',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: _isEditingDocs ? Colors.red.shade700 : const Color(0xFF4B5563),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
+                ],
                 const Spacer(),
                 _AddDocChip(
                   onTap: () => _showUploadModal(context),
@@ -2413,8 +2415,8 @@ class _AiGuidePanelState extends ConsumerState<_AiGuidePanel> {
     try {
       final branding = ref.read(brandingProvider);
       final bankIdCode = branding == BrandingMode.myBank
-          ? '11111111-1111-1111-1111-111111111111'
-          : '22222222-2222-2222-2222-222222222222';
+          ? dynamicMyBankId
+          : dynamicJpmcId;
       final result = await _service.sendRelationshipHubChat(
         trimmed,
         prospectId: widget.prospectId,

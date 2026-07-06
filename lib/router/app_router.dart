@@ -19,12 +19,12 @@ class AppRoutes {
   static const banker = '/banker';
   static const home = '/';
 
-  static const mybankerHome = '/mybank';
-  static const mybankerBanker = '/mybank/banker';
-  static const mybankerBankerDetail = '/mybank/banker/:prospectId';
-  static const mybankerStageSelector = '/mybank/stages';
-  static const mybankerRelationshipHub = '/mybank/relationship-hub';
-  static const mybankerProspect = '/mybank/p=:prospectId';
+  static const mybankerHome = '/:slug';
+  static const mybankerBanker = '/:slug/banker';
+  static const mybankerBankerDetail = '/:slug/banker/:prospectId';
+  static const mybankerStageSelector = '/:slug/stages';
+  static const mybankerRelationshipHub = '/:slug/relationship-hub';
+  static const mybankerProspect = '/:slug/p=:prospectId';
 
   static const mybankersBanker = '/mybanks/banker';
   static const mybankersBankerDetail = '/mybanks/banker/:prospectId';
@@ -54,22 +54,39 @@ GoRouter createRouter({
       final uri = state.uri;
       final path = uri.path;
 
-      // 1. Branding detection and persistence
-      final isTargetMyBanker = path.startsWith('/mybank') || path.startsWith('/mybanks');
-      if (isTargetMyBanker) {
-        Future.microtask(() => ref.read(brandingProvider.notifier).setBranding(BrandingMode.myBank));
-      } else {
-        // If not explicitly visiting a mybank path, but our state is myBank,
-        // we redirect them to the branded path.
-        final currentBranding = ref.read(brandingProvider);
-        if (currentBranding == BrandingMode.myBank) {
-          if (path != AppRoutes.login && path != AppRoutes.signup) {
-            final newPath = path == '/' ? '/mybank' : '/mybank$path';
+      // Helper to extract first path segment as slug (excluding system paths)
+      String getSlugFromPath(String path) {
+        if (path == '/' || path.isEmpty) return '';
+        final segments = path.split('/').where((s) => s.isNotEmpty).toList();
+        if (segments.isEmpty) return '';
+        final firstSegment = segments.first;
+        
+        const systemPrefixes = {'login', 'signup', 'stages', 'relationship-hub', 'banker', 'p', 'mybanks'};
+        if (systemPrefixes.contains(firstSegment)) {
+          return '';
+        }
+        return firstSegment;
+      }
+
+      final slug = state.pathParameters['slug'] ?? getSlugFromPath(path);
+      Future.microtask(() {
+        ref.read(activeSlugProvider.notifier).state = slug;
+        if (slug.isNotEmpty) {
+          ref.read(brandingProvider.notifier).setBranding(BrandingMode.myBank);
+        } else {
+          ref.read(brandingProvider.notifier).setBranding(BrandingMode.jpmc);
+        }
+      });
+
+      // If we are on JPMC path, but our active slug is not empty, redirect to the custom path
+      if (slug.isEmpty) {
+        final activeSlug = ref.read(activeSlugProvider);
+        if (activeSlug.isNotEmpty) {
+          if (path != AppRoutes.login && path != AppRoutes.signup && !path.startsWith('/mybanks')) {
+            final newPath = path == '/' ? '/$activeSlug' : '/$activeSlug$path';
             final newUri = Uri(path: newPath, queryParameters: uri.queryParameters);
             return newUri.toString();
           }
-        } else {
-          Future.microtask(() => ref.read(brandingProvider.notifier).setBranding(BrandingMode.jpmc));
         }
       }
 
@@ -85,8 +102,8 @@ GoRouter createRouter({
       }
 
       if (isOnLogin || isOnSignup) {
-        final currentBranding = ref.read(brandingProvider);
-        return currentBranding == BrandingMode.myBank ? AppRoutes.mybankerHome : AppRoutes.home;
+        final activeSlug = ref.read(activeSlugProvider);
+        return activeSlug.isNotEmpty ? '/$activeSlug' : AppRoutes.home;
       }
 
       return null;

@@ -50,6 +50,7 @@ class _LaunchPadAppState extends ConsumerState<LaunchPadApp> {
   @override
   Widget build(BuildContext context) {
     ref.watch(bankNamesProvider);
+    ref.watch(activeBankAlignerProvider);
     // Drive GoRouter refresh whenever auth state changes.
     // ref.listen is safe here — called during build.
     ref.listen<bool>(isAuthenticatedProvider, (_, __) {

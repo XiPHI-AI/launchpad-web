@@ -58,6 +58,7 @@ class ProspectInitResult {
   final String? bankerPosition;
   final String? lastSeenAt;
   final Map<String, dynamic> aiAttributesHistorical;
+  final String? bankId;
 
   ProspectInitResult({
     required this.prospectId,
@@ -81,6 +82,7 @@ class ProspectInitResult {
     this.bankerPosition,
     this.lastSeenAt,
     this.aiAttributesHistorical = const {},
+    this.bankId,
   });
 
   Map<String, dynamic> toDynamicVariables({bool lockProfileFields = false}) {
@@ -324,6 +326,7 @@ class Banker {
   final String? name;
   final String? position;
   final String? role;
+  final String? bankId;
 
   const Banker({
     required this.bankerId,
@@ -331,6 +334,7 @@ class Banker {
     this.name,
     this.position,
     this.role,
+    this.bankId,
   });
 
   factory Banker.fromJson(Map<String, dynamic> json) {
@@ -340,6 +344,7 @@ class Banker {
       name: json['name'] as String?,
       position: json['position'] as String?,
       role: json['role'] as String?,
+      bankId: json['bank_id'] as String?,
     );
   }
 }
@@ -465,10 +470,15 @@ class ProspectDocument {
   });
 
   factory ProspectDocument.fromJson(Map<String, dynamic> json) {
+    String cleanName(String name) {
+      final idx = name.lastIndexOf('.');
+      return (idx > 0) ? name.substring(0, idx) : name;
+    }
+
     return ProspectDocument(
       documentId: json['document_id'] as String,
       prospectId: json['prospect_id'] as String,
-      fileName: json['file_name'] as String,
+      fileName: cleanName(json['file_name'] as String),
       version: json['version'] as String? ?? 'v1.0',
       status: json['status'] as String? ?? 'Approved',
       confidenceScore: (json['confidence_score'] as num?)?.toDouble() ?? 0.85,
@@ -671,6 +681,7 @@ class ConversationService {
       bankerId: data['banker_id'] as String?,
       bankerName: data['banker_name'] as String?,
       bankerPosition: data['banker_position'] as String?,
+      bankId: data['bank_id'] as String?,
     );
   }
 
@@ -708,6 +719,7 @@ class ConversationService {
       bankerId: data['banker_id'] as String?,
       bankerName: data['banker_name'] as String?,
       bankerPosition: data['banker_position'] as String?,
+      bankId: data['bank_id'] as String?,
     );
   }
 
@@ -747,6 +759,7 @@ class ConversationService {
       bankerId: data['banker_id'] as String?,
       bankerName: data['banker_name'] as String?,
       bankerPosition: data['banker_position'] as String?,
+      bankId: data['bank_id'] as String?,
       classification: classificationData == null
           ? null
           : ProspectClassification(
@@ -881,6 +894,7 @@ class ConversationService {
       return {
         'bank_id': map['bank_id'] as String,
         'bank_name': map['bank_name'] as String,
+        'slug': (map['slug'] ?? '') as String,
       };
     }).toList();
   }
@@ -1004,9 +1018,12 @@ class ConversationService {
     return result;
   }
 
-  Future<List<ProspectInitResult>> listProspects() async {
+  Future<List<ProspectInitResult>> listProspects({String? bankId}) async {
     final response = await _dio.get(
       '${ApiConfig.baseUrl}/conversations/prospects',
+      queryParameters: {
+        if (bankId != null) 'bank_id': bankId,
+      },
     );
     final data = response.data;
     if (data is! List) {
@@ -1045,6 +1062,7 @@ class ConversationService {
         bankerName: data['banker_name'] as String?,
         bankerPosition: data['banker_position'] as String?,
         lastSeenAt: data['last_seen_at'] as String?,
+        bankId: data['bank_id'] as String?,
         classification: classificationData == null
             ? null
             : ProspectClassification(
@@ -1074,9 +1092,12 @@ class ConversationService {
     }).toList();
   }
 
-  Future<List<Banker>> listBankers() async {
+  Future<List<Banker>> listBankers({String? bankId}) async {
     final response = await _dio.get(
       '${ApiConfig.baseUrl}/conversations/bankers',
+      queryParameters: {
+        if (bankId != null) 'bank_id': bankId,
+      },
     );
     final data = response.data;
     if (data is! List) {
@@ -1110,9 +1131,12 @@ class ConversationService {
     return (data as List).map((item) => item.toString()).toList();
   }
 
-  Future<List<dynamic>> getUnassignedProspects() async {
+  Future<List<dynamic>> getUnassignedProspects({String? bankId}) async {
     final response = await _dio.get(
       '${ApiConfig.baseUrl}/conversations/prospects/unassigned',
+      queryParameters: {
+        if (bankId != null) 'bank_id': bankId,
+      },
     );
     final data = response.data;
     if (data is! List) {
@@ -1125,6 +1149,18 @@ class ConversationService {
     await _dio.post(
       '${ApiConfig.baseUrl}/conversations/prospect/$prospectId/assign-banker',
       data: {'banker_id': bankerId},
+    );
+  }
+
+  Future<void> createBanker(String name, String email, String position, String? bankId) async {
+    await _dio.post(
+      '${ApiConfig.baseUrl}/conversations/banker',
+      data: {
+        'name': name,
+        'email': email,
+        'position': position,
+        'bank_id': bankId,
+      },
     );
   }
 
