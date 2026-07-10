@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/conversation_service.dart';
 import '../../shared/widgets/app_shell.dart';
+import '../../core/branding/branding_provider.dart';
 
 class _StageOption {
   final String bucket;
@@ -99,7 +100,6 @@ class _StageSelectorPageState extends State<StageSelectorPage> {
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => AppShell(
-            conversationToken: tokenResult.conversationToken,
             stageBucket: prospect.stageBucket,
             prospectId: prospectId,
             dynamicVariables: tokenResult.dynamicVariables,
@@ -126,7 +126,10 @@ class _StageSelectorPageState extends State<StageSelectorPage> {
 
     try {
       // 1. Resolve invitation code → prospect + stage + agent
-      final initResult = await _service.initProspect(invitationCode);
+      final initResult = await _service.initProspect(
+        invitationCode,
+        bankId: getActiveBankIdFromLocation(),
+      );
 
       setState(() {
         _agentName = initResult.agentDisplayName;
@@ -142,7 +145,6 @@ class _StageSelectorPageState extends State<StageSelectorPage> {
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => AppShell(
-            conversationToken: tokenResult.conversationToken,
             stageBucket: initResult.stageBucket,
             prospectId: initResult.prospectId,
             dynamicVariables: tokenResult.dynamicVariables,
@@ -181,7 +183,6 @@ class _StageSelectorPageState extends State<StageSelectorPage> {
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => AppShell(
-            conversationToken: result.conversationToken,
             stageBucket: stageBucket,
             prospectId: prospectId,
             dynamicVariables: result.dynamicVariables,

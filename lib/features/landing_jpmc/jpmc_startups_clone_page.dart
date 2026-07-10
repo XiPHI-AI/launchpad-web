@@ -149,7 +149,10 @@ class _JpmcStartupsClonePageState extends ConsumerState<JpmcStartupsClonePage> {
   Future<void> _handleInviteCode(String invitationCode) async {
     setState(() => _isLoading = true);
     try {
-      final initResult = await _service.initProspect(invitationCode);
+      final initResult = await _service.initProspect(
+        invitationCode,
+        bankId: getActiveBankIdFromLocation(),
+      );
       if (!mounted) return;
       setState(() {
         _resolvedProspect = initResult;

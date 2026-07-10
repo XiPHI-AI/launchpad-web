@@ -265,13 +265,16 @@ class CrmProspect {
 // --- RIVERPOD PROSPECTS STATE PROVIDER ---
 
 class BankerProspectsNotifier extends StateNotifier<List<CrmProspect>> {
-  BankerProspectsNotifier() : super([]) {
+  final Ref ref;
+  final String bankId;
+
+  BankerProspectsNotifier(this.ref, this.bankId) : super([]) {
     loadProspects();
   }
 
   Future<void> loadProspects() async {
     try {
-      final list = await ConversationService().listProspects(bankId: dynamicMyBankId);
+      final list = await ConversationService().listProspects(bankId: bankId);
       state = list.map((r) => _mapToCrmProspect(r)).toList();
     } catch (e) {
       print("Failed to load prospects from database: $e");
@@ -938,7 +941,8 @@ class BankerProspectsNotifier extends StateNotifier<List<CrmProspect>> {
 }
 
 final bankersProvider = FutureProvider<List<Banker>>((ref) async {
-  return await ConversationService().listBankers(bankId: dynamicMyBankId);
+  final bankId = ref.watch(activeBankIdProvider);
+  return await ConversationService().listBankers(bankId: bankId);
 });
 
 final activeBankerProvider = StateProvider<Banker?>((ref) {
@@ -946,7 +950,8 @@ final activeBankerProvider = StateProvider<Banker?>((ref) {
 });
 
 final bankerProspectsProvider = StateNotifierProvider<BankerProspectsNotifier, List<CrmProspect>>((ref) {
-  return BankerProspectsNotifier();
+  final bankId = ref.watch(activeBankIdProvider);
+  return BankerProspectsNotifier(ref, bankId);
 });
 
 // --- STANDALONE DETAIL PANEL ---
@@ -1217,10 +1222,10 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
                     ),
                   ),
                   if (() {
-                    final targetSlot = getSlotForProspectName(prospect.name);
-                    if (targetSlot == null) return false;
+                    final targetIndex = prospects.indexOf(prospect);
+                    if (targetIndex == -1) return false;
                     for (var item in _notifService.activeHubNotifications) {
-                      if (item.prospectSlot == targetSlot) return true;
+                      if (item.prospectSlot == targetIndex) return true;
                     }
                     return false;
                   }())
@@ -3078,55 +3083,6 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ── Prospect Notifications ───────────────────────────────────────────
-        if (prospectNotifications.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.only(bottom: 8),
-            child: Text(
-              'NOTIFICATIONS',
-              style: TextStyle(
-                fontSize: 10,
-                letterSpacing: 1.2,
-                color: BankerColors.muted2,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          ...prospectNotifications.map((entry) {
-            final originalIndex = entry.$1;
-            final item = entry.$2;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: NotificationCard(
-                icon: item.icon,
-                iconColor: item.iconColor,
-                iconBg: item.bg,
-                title: item.title,
-                message: item.message,
-                footer: item.footer,
-                onTap: () {
-                  showDialog(
-                    context: context,
-                    barrierColor: Colors.black.withOpacity(0.5),
-                    builder: (dialogContext) {
-                      return NotificationDetailModal(
-                        item: item,
-                        onMarkAsRead: () {
-                          Navigator.of(dialogContext).pop();
-                          _notifService.markAsRead(originalIndex);
-                        },
-                      );
-                    },
-                  );
-                },
-                onMarkAsRead: () => _notifService.markAsRead(originalIndex),
-              ),
-            );
-          }),
-          const SizedBox(height: 8),
-          Container(height: 1, color: BankerColors.line2),
-          const SizedBox(height: 16),
-        ],
         // Profile details at top
         Container(
           padding: const EdgeInsets.all(16),
@@ -4285,7 +4241,8 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
 
     // Auto-select banker with persistence
     bankersAsync.whenData((bankers) {
-      if (activeBanker == null && bankers.isNotEmpty) {
+      final hasActiveBanker = activeBanker != null && bankers.any((b) => b.bankerId == activeBanker.bankerId);
+      if (!hasActiveBanker && bankers.isNotEmpty) {
         WidgetsBinding.instance.addPostFrameCallback((_) async {
           final savedId = await ProspectStorage().getActiveBankerId();
           if (savedId != null) {
@@ -4900,10 +4857,10 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                                             ),
                                           ),
                                           if (() {
-                                            final targetSlot = getSlotForProspectName(prospect.name);
-                                            if (targetSlot == null) return false;
+                                            final targetIndex = prospects.indexOf(prospect);
+                                            if (targetIndex == -1) return false;
                                             for (var item in _notifService.activeHubNotifications) {
-                                              if (item.prospectSlot == targetSlot) return true;
+                                              if (item.prospectSlot == targetIndex) return true;
                                             }
                                             return false;
                                           }())
@@ -5224,7 +5181,7 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                   name,
                   email,
                   position,
-                  dynamicMyBankId,
+                  ref.read(activeBankIdProvider),
                 );
                 
                 ref.invalidate(bankersProvider);
@@ -5428,7 +5385,7 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
           builder: (ctx, setModalState) {
             // Load unassigned prospects once on first build
             if (_loading && _unassigned.isEmpty) {
-              ConversationService().getUnassignedProspects(bankId: dynamicMyBankId).then((list) {
+              ConversationService().getUnassignedProspects(bankId: ref.read(activeBankIdProvider)).then((list) {
                 setModalState(() {
                   _unassigned = list;
                   _loading = false;
@@ -6353,7 +6310,8 @@ class _BankerDetailPageState extends ConsumerState<BankerDetailPage> {
 
     // Auto-select banker with persistence
     bankersAsync.whenData((bankers) {
-      if (activeBanker == null && bankers.isNotEmpty) {
+      final hasActiveBanker = activeBanker != null && bankers.any((b) => b.bankerId == activeBanker.bankerId);
+      if (!hasActiveBanker && bankers.isNotEmpty) {
         WidgetsBinding.instance.addPostFrameCallback((_) async {
           final savedId = await ProspectStorage().getActiveBankerId();
           if (savedId != null) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/conversation_service.dart';
 import '../../shared/widgets/app_shell.dart';
+import '../../core/branding/branding_provider.dart';
 import '../../shared/widgets/hub_nav_bar.dart';
 import '../../theme/app_theme.dart';
 import '../../services/prospect_storage.dart';
@@ -99,7 +100,10 @@ class _JpmcLandingPageState extends State<JpmcLandingPage> {
   Future<void> _handleInviteCode(String invitationCode) async {
     setState(() => _isLoading = true);
     try {
-      final initResult = await _service.initProspect(invitationCode);
+      final initResult = await _service.initProspect(
+        invitationCode,
+        bankId: getActiveBankIdFromLocation(),
+      );
       if (!mounted) return;
       setState(() {
         _resolvedProspect = initResult;

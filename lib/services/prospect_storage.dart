@@ -14,9 +14,18 @@ class ProspectStorage {
     webOptions: WebOptions(dbName: 'launchpad_secure', publicKey: 'launchpad_key'),
   );
 
-  String _getProspectKey() => '${_legacyProspectIdKey}_$dynamicMyBankId';
-  String _getBankerIdKey() => '${_legacyBankerIdKey}_$dynamicMyBankId';
-  String _getBankerJsonKey() => '${_legacyBankerJsonKey}_$dynamicMyBankId';
+  String _getProspectKey() {
+    final activeId = getActiveBankIdFromLocation();
+    return '${_legacyProspectIdKey}_$activeId';
+  }
+  String _getBankerIdKey() {
+    final activeId = getActiveBankIdFromLocation();
+    return '${_legacyBankerIdKey}_$activeId';
+  }
+  String _getBankerJsonKey() {
+    final activeId = getActiveBankIdFromLocation();
+    return '${_legacyBankerJsonKey}_$activeId';
+  }
 
   /// Persist [prospectId] to secure storage.
   Future<void> saveProspectId(String prospectId) async {
@@ -41,11 +50,12 @@ class ProspectStorage {
     if (secVal != null && secVal.isNotEmpty) return secVal;
 
     // 3. Fallback: Check legacy key
+    final activeId = getActiveBankIdFromLocation();
     try {
       final legacyVal = html.window.localStorage[_legacyProspectIdKey];
       if (legacyVal != null && legacyVal.isNotEmpty) {
         // Only treat legacy session as belonging to JPMC
-        if (dynamicMyBankId == dynamicJpmcId) {
+        if (activeId == dynamicJpmcId) {
           // Migrate legacy session to JPMC key
           await saveProspectId(legacyVal);
           return legacyVal;
@@ -55,7 +65,7 @@ class ProspectStorage {
 
     final legacySecVal = await _storage.read(key: _legacyProspectIdKey);
     if (legacySecVal != null && legacySecVal.isNotEmpty) {
-      if (dynamicMyBankId == dynamicJpmcId) {
+      if (activeId == dynamicJpmcId) {
         await saveProspectId(legacySecVal);
         return legacySecVal;
       }
@@ -96,10 +106,11 @@ class ProspectStorage {
     if (secVal != null && secVal.isNotEmpty) return secVal;
 
     // Fallback: Check legacy key
+    final activeId = getActiveBankIdFromLocation();
     try {
       final legacyVal = html.window.localStorage[_legacyBankerIdKey];
       if (legacyVal != null && legacyVal.isNotEmpty) {
-        if (dynamicMyBankId == dynamicJpmcId) {
+        if (activeId == dynamicJpmcId) {
           await saveActiveBankerId(legacyVal);
           return legacyVal;
         }
@@ -108,7 +119,7 @@ class ProspectStorage {
 
     final legacySecVal = await _storage.read(key: _legacyBankerIdKey);
     if (legacySecVal != null && legacySecVal.isNotEmpty) {
-      if (dynamicMyBankId == dynamicJpmcId) {
+      if (activeId == dynamicJpmcId) {
         await saveActiveBankerId(legacySecVal);
         return legacySecVal;
       }
@@ -161,10 +172,11 @@ class ProspectStorage {
     } catch (_) {}
 
     // Fallback: Check legacy key
+    final activeId = getActiveBankIdFromLocation();
     try {
       final legacyVal = html.window.localStorage[_legacyBankerJsonKey];
       if (legacyVal != null && legacyVal.isNotEmpty) {
-        if (dynamicMyBankId == dynamicJpmcId) {
+        if (activeId == dynamicJpmcId) {
           final map = jsonDecode(legacyVal) as Map<String, dynamic>;
           final banker = Banker.fromJson(map);
           saveActiveBanker(banker);

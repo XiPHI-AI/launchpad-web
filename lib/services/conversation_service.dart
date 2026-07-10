@@ -647,12 +647,14 @@ class ConversationService {
   Future<ProspectInitResult> initProspect(
     String invitationCode, {
     String? email,
+    String? bankId,
   }) async {
     final response = await _dio.post(
       '${ApiConfig.baseUrl}/conversations/prospect/init',
       data: {
         'invitation_code': invitationCode,
         if (email != null) 'email': email,
+        if (bankId != null) 'bank_id': bankId,
       },
     );
     final data = response.data as Map<String, dynamic>;
@@ -686,9 +688,15 @@ class ConversationService {
   }
 
   /// Fetches an existing prospect by email for pre-filling.
-  Future<ProspectInitResult> lookupProspectByEmail(String email) async {
+  Future<ProspectInitResult> lookupProspectByEmail(
+    String email, {
+    String? bankId,
+  }) async {
     final response = await _dio.get(
       '${ApiConfig.baseUrl}/conversations/prospect/lookup-email/$email',
+      queryParameters: {
+        if (bankId != null) 'bank_id': bankId,
+      },
     );
     final data = response.data as Map<String, dynamic>;
     final conversationCount = data['conversation_count'] as int? ?? 0;

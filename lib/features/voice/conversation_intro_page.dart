@@ -263,7 +263,10 @@ class _ConversationIntroPageState extends ConsumerState<ConversationIntroPage> {
     _isCheckingEmail = true;
 
     try {
-      final result = await _service.lookupProspectByEmail(lowerEmail);
+      final result = await _service.lookupProspectByEmail(
+        lowerEmail,
+        bankId: getActiveBankIdFromLocation(),
+      );
       if (!mounted) return;
 
       // If we found a different prospect than the current one

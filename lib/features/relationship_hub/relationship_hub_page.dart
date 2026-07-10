@@ -578,7 +578,13 @@ int? getSlotForProspectName(String prospectName) {
   } else if (nameLower.contains('gil') || nameLower.contains('meridian')) {
     return 2;
   }
-  return null;
+  
+  // Fallback to a deterministic mapping based on string hash so all banker prospects show notifications
+  int sum = 0;
+  for (int i = 0; i < nameLower.length; i++) {
+    sum += nameLower.codeUnitAt(i);
+  }
+  return sum % 3;
 }
 
 CrmProspect getProspectForNotification(NotificationItem item, List<CrmProspect> prospects) {
@@ -612,13 +618,12 @@ CrmProspect getProspectForNotification(NotificationItem item, List<CrmProspect> 
       notes: '',
     );
   }
-  // Try to find the prospect that matches this slot
-  for (var p in prospects) {
-    if (getSlotForProspectName(p.name) == item.prospectSlot) {
-      return p;
-    }
+  // Try to find the prospect that matches this slot index
+  final slot = item.prospectSlot;
+  if (slot >= 0 && slot < prospects.length) {
+    return prospects[slot];
   }
-  return prospects[item.prospectSlot % prospects.length];
+  return prospects[slot % prospects.length];
 }
 
 NotificationItem localizeNotification(
@@ -870,8 +875,8 @@ class _NotificationsSectionState extends State<_NotificationsSection> {
           // Inside prospect detail page:
           // 1. Only show notifications belonging to this prospect slot
           if (widget.prospectName != null) {
-            final targetSlot = getSlotForProspectName(widget.prospectName!);
-            if (targetSlot == null || item.prospectSlot != targetSlot) continue;
+            final targetIndex = prospects.indexWhere((p) => p.name == widget.prospectName);
+            if (targetIndex == -1 || item.prospectSlot != targetIndex) continue;
           }
           // 2. Allow different kinds of notifications (do NOT filter out non-Meeting confirmed ones)
         } else {
@@ -879,9 +884,8 @@ class _NotificationsSectionState extends State<_NotificationsSection> {
           // 1. Only show 'Meeting confirmed' in the top bar (one per prospect)
           if (item.title != 'Meeting confirmed') continue;
           
-          final assignedSlot = item.prospectSlot;
-          final hasMatchingProspect = prospects.any((p) => getSlotForProspectName(p.name) == assignedSlot);
-          if (!hasMatchingProspect) continue;
+          final assignedIndex = item.prospectSlot;
+          if (assignedIndex >= prospects.length) continue;
         }
       } else {
         // Client view

@@ -69,6 +69,33 @@ GoRouter createRouter({
       }
 
       final slug = state.pathParameters['slug'] ?? getSlugFromPath(path);
+
+      if (slug.isNotEmpty) {
+        final banks = ref.read(bankNamesProvider);
+        bool isValidSlug = false;
+        if (banks.isNotEmpty) {
+          isValidSlug = banks.any((b) => b.slug == slug);
+        } else {
+          isValidSlug = (slug == 'mybank');
+        }
+
+        if (!isValidSlug) {
+          final fallbackSlug = banks.isNotEmpty
+              ? banks.firstWhere(
+                  (b) => b.slug.isNotEmpty && b.slug != 'jpmc',
+                  orElse: () => BankInfo(bankId: '', bankName: '', slug: 'mybank'),
+                ).slug
+              : 'mybank';
+          final segments = path.split('/').where((s) => s.isNotEmpty).toList();
+          if (segments.isNotEmpty && segments.first == slug) {
+            segments[0] = fallbackSlug;
+          }
+          final newPath = '/' + segments.join('/');
+          final newUri = Uri(path: newPath, queryParameters: uri.queryParameters);
+          return newUri.toString();
+        }
+      }
+
       Future.microtask(() {
         ref.read(activeSlugProvider.notifier).state = slug;
         if (slug.isNotEmpty) {

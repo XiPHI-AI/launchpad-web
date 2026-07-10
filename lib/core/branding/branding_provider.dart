@@ -1,3 +1,4 @@
+import 'dart:html' as html;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/conversation_service.dart';
 
@@ -31,10 +32,44 @@ class BankInfo {
 }
 
 // Dynamic values loaded on startup from the database
+List<BankInfo> globalLoadedBanks = [];
 String dynamicMyBankName = 'My Bank';
 String dynamicJpmcName = 'J.P. Morgan Innovation Economy';
 String dynamicMyBankId = '11111111-1111-1111-1111-111111111111';
 String dynamicJpmcId = '22222222-2222-2222-2222-222222222222';
+String dynamicActiveBankId = '22222222-2222-2222-2222-222222222222';
+
+String getActiveBankIdFromLocation() {
+  try {
+    final path = html.window.location.pathname ?? '';
+    if (path.isEmpty || path == '/') {
+      return dynamicJpmcId;
+    }
+    final segments = path.split('/').where((s) => s.isNotEmpty).toList();
+    if (segments.isEmpty) return dynamicJpmcId;
+    final firstSegment = segments.first;
+    const systemPrefixes = {'login', 'signup', 'stages', 'relationship-hub', 'banker', 'p', 'mybanks'};
+    if (systemPrefixes.contains(firstSegment)) {
+      return dynamicJpmcId;
+    }
+    
+    // Look up dynamically in database loaded list
+    if (globalLoadedBanks.isNotEmpty) {
+      for (final bank in globalLoadedBanks) {
+        if (bank.slug == firstSegment) {
+          return bank.bankId;
+        }
+      }
+    }
+    
+    if (firstSegment == 'mybank') {
+      return dynamicMyBankId;
+    }
+    return dynamicMyBankId;
+  } catch (_) {
+    return dynamicJpmcId;
+  }
+}
 
 String get myBankText => dynamicMyBankName;
 String get jpmcInnovationEconomyText => dynamicJpmcName;
@@ -67,6 +102,7 @@ class BankNamesNotifier extends StateNotifier<List<BankInfo>> {
 
   void _updateGlobals(List<BankInfo> banks, String currentSlug) {
     if (banks.isEmpty) return;
+    globalLoadedBanks = banks;
 
     // 1. Find JPMC (slug is empty)
     final jpmcBank = banks.firstWhere(
@@ -81,7 +117,7 @@ class BankNamesNotifier extends StateNotifier<List<BankInfo>> {
     dynamicJpmcId = jpmcBank.bankId;
 
     // 2. Find active custom bank matching currentSlug (if any)
-    if (currentSlug.isNotEmpty) {
+    if (currentSlug.isNotEmpty && currentSlug != 'jpmc') {
       final match = banks.firstWhere(
         (b) => b.slug == currentSlug,
         orElse: () => BankInfo(
@@ -92,6 +128,7 @@ class BankNamesNotifier extends StateNotifier<List<BankInfo>> {
       );
       dynamicMyBankName = match.bankName;
       dynamicMyBankId = match.bankId;
+      dynamicActiveBankId = match.bankId;
     } else {
       // Fallback to default custom bank
       final defaultCustom = banks.firstWhere(
@@ -104,6 +141,7 @@ class BankNamesNotifier extends StateNotifier<List<BankInfo>> {
       );
       dynamicMyBankName = defaultCustom.bankName;
       dynamicMyBankId = defaultCustom.bankId;
+      dynamicActiveBankId = dynamicJpmcId;
     }
   }
 
@@ -123,6 +161,40 @@ final activeBankAlignerProvider = Provider<BankInfo?>((ref) {
   final notifier = ref.watch(bankNamesProvider.notifier);
   notifier.setSlug(slug);
   return null;
+});
+
+final activeBankIdProvider = Provider<String>((ref) {
+  final slug = ref.watch(activeSlugProvider);
+  final banks = ref.watch(bankNamesProvider);
+  if (banks.isEmpty) {
+    if (slug.isNotEmpty && slug != 'jpmc') {
+      return '11111111-1111-1111-1111-111111111111';
+    } else {
+      return '22222222-2222-2222-2222-222222222222';
+    }
+  }
+  
+  if (slug.isNotEmpty && slug != 'jpmc') {
+    final match = banks.firstWhere(
+      (b) => b.slug == slug,
+      orElse: () => BankInfo(
+        bankId: '11111111-1111-1111-1111-111111111111',
+        bankName: 'My Bank',
+        slug: 'mybank',
+      ),
+    );
+    return match.bankId;
+  } else {
+    final jpmcBank = banks.firstWhere(
+      (b) => b.slug.isEmpty || b.slug == 'jpmc',
+      orElse: () => BankInfo(
+        bankId: '22222222-2222-2222-2222-222222222222',
+        bankName: 'J.P. Morgan Innovation Economy',
+        slug: '',
+      ),
+    );
+    return jpmcBank.bankId;
+  }
 });
 
 String cleanBrandingText(String text, BrandingMode mode) {

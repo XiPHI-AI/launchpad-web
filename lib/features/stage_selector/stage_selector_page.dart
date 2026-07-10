@@ -70,7 +70,10 @@ class _StageSelectorPageState extends ConsumerState<StageSelectorPage> {
       _errorMessage = null;
     });
     try {
-      final initResult = await _service.initProspect(invitationCode);
+      final initResult = await _service.initProspect(
+        invitationCode,
+        bankId: getActiveBankIdFromLocation(),
+      );
       if (!mounted) return;
       setState(() {
         _resolvedProspect = initResult;
