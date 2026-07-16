@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'dart:convert';
 import 'dart:html' as html;
 import '../../shared/widgets/hub_nav_bar.dart';
 import '../../services/prospect_storage.dart';
@@ -9,6 +10,7 @@ import '../../services/conversation_service.dart';
 import '../../services/notification_service.dart';
 import '../relationship_hub/relationship_hub_page.dart';
 import '../../core/branding/branding_provider.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 
 // --- COLOR PALETTE FROM HTML ---
 class BankerColors {
@@ -159,6 +161,10 @@ class CrmProspect {
   final List<CrmActivity> activity;
   final String notes;
 
+  final String? leadTemperature;
+  final double? conversionProbability;
+  final String? salesPriority;
+
   CrmProspect({
     required this.id,
     required this.name,
@@ -187,6 +193,9 @@ class CrmProspect {
     this.headcount = '1-10',
     this.incorporated = false,
     this.priorities = const [],
+    this.leadTemperature,
+    this.conversionProbability,
+    this.salesPriority,
   });
 
   String get initials {
@@ -229,6 +238,9 @@ class CrmProspect {
     String? headcount,
     bool? incorporated,
     List<String>? priorities,
+    String? leadTemperature,
+    double? conversionProbability,
+    String? salesPriority,
   }) {
     return CrmProspect(
       id: id ?? this.id,
@@ -258,6 +270,9 @@ class CrmProspect {
       headcount: headcount ?? this.headcount,
       incorporated: incorporated ?? this.incorporated,
       priorities: priorities ?? this.priorities,
+      leadTemperature: leadTemperature ?? this.leadTemperature,
+      conversionProbability: conversionProbability ?? this.conversionProbability,
+      salesPriority: salesPriority ?? this.salesPriority,
     );
   }
 }
@@ -525,6 +540,9 @@ class BankerProspectsNotifier extends StateNotifier<List<CrmProspect>> {
       headcount: headcount,
       incorporated: incorporated,
       priorities: priorities,
+      leadTemperature: r.leadTemperature,
+      conversionProbability: r.conversionProbability,
+      salesPriority: r.salesPriority,
     );
   }
 
@@ -999,6 +1017,12 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
   ProspectFullProfile? _fullProfile;
   bool _loadingFullProfile = false;
 
+  ProspectDataScienceDetails? _dsDetails;
+  bool _loadingDsDetails = false;
+  bool _runningDsScoring = false;
+  Map<String, dynamic> _simulatedFeatures = {};
+  bool _isSandboxDirty = false;
+
   Future<void> _fetchFullProfile() async {
     if (!mounted) return;
     setState(() {
@@ -1022,15 +1046,91 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
     }
   }
 
+  Future<void> _fetchDsDetails() async {
+    if (!mounted) return;
+    setState(() {
+      _loadingDsDetails = true;
+    });
+    try {
+      final details = await ConversationService().getProspectDataScience(widget.prospectId);
+      if (mounted) {
+        setState(() {
+          _dsDetails = details;
+          _loadingDsDetails = false;
+          _simulatedFeatures = Map<String, dynamic>.from(details.rawFeaturesJson);
+          _isSandboxDirty = false;
+        });
+      }
+    } catch (e) {
+      print("Failed to fetch data science details: $e");
+      if (mounted) {
+        setState(() {
+          _dsDetails = null;
+          _loadingDsDetails = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _runDsScoring({bool useSimulation = false}) async {
+    if (!mounted) return;
+    setState(() {
+      _runningDsScoring = true;
+    });
+    try {
+      if (useSimulation) {
+        // Simulation run: calculated details are returned directly, DB is not modified
+        final details = await ConversationService().runProspectDataScience(
+          widget.prospectId,
+          features: _simulatedFeatures,
+          simulation: true,
+        ) as ProspectDataScienceDetails;
+        
+        if (mounted) {
+          setState(() {
+            _dsDetails = details;
+            _simulatedFeatures = Map<String, dynamic>.from(details.rawFeaturesJson);
+            _isSandboxDirty = false;
+            _runningDsScoring = false;
+          });
+        }
+      } else {
+        // Live run: saves to database and refreshes DB cache
+        await ConversationService().runProspectDataScience(widget.prospectId, features: null, simulation: false);
+        ref.read(bankerProspectsProvider.notifier).loadProspects();
+        final details = await ConversationService().getProspectDataScience(widget.prospectId);
+        
+        if (mounted) {
+          setState(() {
+            _dsDetails = details;
+            _simulatedFeatures = Map<String, dynamic>.from(details.rawFeaturesJson);
+            _isSandboxDirty = false;
+            _runningDsScoring = false;
+          });
+        }
+      }
+    } catch (e) {
+      print("Failed to run data science scoring: $e");
+      if (mounted) {
+        setState(() {
+          _runningDsScoring = false;
+        });
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    final activeBanker = ref.read(activeBankerProvider);
+    _activeTab = (activeBanker?.bankerId == 'datascience') ? 'data_science' : 'assign';
     _notifService.addListener(_onNotifUpdate);
     _fetchProducts();
     _fetchSuggestedQuestions();
     _fetchCheckpoints();
     _fetchDocuments();
     _fetchFullProfile();
+    _fetchDsDetails();
   }
 
   void _onNotifUpdate() {
@@ -1046,6 +1146,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
       _fetchCheckpoints();
       _fetchDocuments();
       _fetchFullProfile();
+      _fetchDsDetails();
       _selectedDocumentForAnalysis = null;
     }
   }
@@ -1152,6 +1253,8 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
   @override
   Widget build(BuildContext context) {
     final prospects = ref.watch(bankerProspectsProvider);
+    final activeBanker = ref.watch(activeBankerProvider);
+    final isDs = activeBanker?.bankerId == 'datascience';
     
     if (prospects.isEmpty) {
       return const Center(
@@ -1285,7 +1388,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
         ),
 
         // Actions
-        if (!widget.showBackButton)
+        if (!widget.showBackButton && !isDs)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: const BoxDecoration(
@@ -1308,19 +1411,21 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
           ),
 
         // Tabs Header
-        Container(
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: BankerColors.line2)),
+        if (!isDs)
+          Container(
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: BankerColors.line2)),
+            ),
+            child: Row(
+              children: [
+                _buildTabButton('Next steps', 'assign'),
+                _buildTabButton('Documents', 'documents'),
+                _buildTabButton('Recommended products', 'products'),
+                _buildTabButton('Suggested questions', 'questions'),
+                _buildTabButton('Data Science', 'data_science'),
+              ],
+            ),
           ),
-          child: Row(
-            children: [
-              _buildTabButton('Next steps', 'assign'),
-              _buildTabButton('Documents', 'documents'),
-              _buildTabButton('Recommended products', 'products'),
-              _buildTabButton('Suggested questions', 'questions'),
-            ],
-          ),
-        ),
 
         // Tab Content
         Expanded(
@@ -1328,7 +1433,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
             color: Colors.white,
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              child: _buildActiveTabContent(prospect),
+              child: isDs ? _buildDataScienceTab(prospect) : _buildActiveTabContent(prospect),
             ),
           ),
         ),
@@ -1379,6 +1484,8 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
         return _buildRecommendedProductsTab(prospect);
       case 'questions':
         return _buildSuggestedQuestionsTab(prospect);
+      case 'data_science':
+        return _buildDataScienceTab(prospect);
       default:
         return const SizedBox.shrink();
     }
@@ -3493,6 +3600,380 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
     );
   }
 
+  Widget _buildDataScienceTab(CrmProspect prospect) {
+    if (_loadingDsDetails || _runningDsScoring) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40.0),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(BankerColors.blue),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Analyzing conversion metrics, chat history, and uploaded documents...',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, color: BankerColors.muted2, fontStyle: FontStyle.italic),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_dsDetails == null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40.0, horizontal: 20.0),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.analytics_outlined, size: 48, color: BankerColors.muted),
+              const SizedBox(height: 16),
+              const Text(
+                'No prediction data available yet.',
+                style: TextStyle(fontSize: 13, color: BankerColors.ink, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Run the Data Science pipeline to score this prospect and generate predictions.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11, color: BankerColors.muted2),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: BankerColors.blue,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: _runDsScoring,
+                icon: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 18),
+                label: const Text('Calculate Scores', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final ds = _dsDetails!;
+    final probColor = ds.conversionProbability >= 65
+        ? const Color(0xFFE0533C)
+        : (ds.conversionProbability >= 35 ? BankerColors.gold : BankerColors.blue);
+
+    // Extract breakdown lists
+    final positives = ds.scoreBreakdownJson['positives'] as List? ?? [];
+    final negatives = ds.scoreBreakdownJson['negatives'] as List? ?? [];
+    final recommendedServices = ds.recommendedServicesJson.cast<Map<String, dynamic>>();
+    final rawParams = ds.rawFeaturesJson;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Action Bar at the top of the tab
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'CONVERSION PREDICTION MODEL SUMMARY',
+                style: TextStyle(fontSize: 10, color: BankerColors.muted2, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+              ),
+              InkWell(
+                onTap: _runDsScoring,
+                borderRadius: BorderRadius.circular(4),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.refresh_rounded, size: 14, color: BankerColors.blue),
+                      SizedBox(width: 4),
+                      Text('Recalculate Scores', style: TextStyle(fontSize: 10, color: BankerColors.blue, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Metrics Summary Row
+          Row(
+            children: [
+              // Lead Temp Card
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: BankerColors.line2),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2)),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('LEAD TEMPERATURE', style: TextStyle(fontSize: 9, color: BankerColors.muted2, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      _buildLeadBadge(ds.leadTemperature),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+
+              // Conversion Prob Card
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: BankerColors.line2),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2)),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('CONVERSION PROBABILITY', style: TextStyle(fontSize: 9, color: BankerColors.muted2, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(99),
+                              child: LinearProgressIndicator(
+                                value: ds.conversionProbability / 100.0,
+                                minHeight: 8,
+                                backgroundColor: BankerColors.cream,
+                                valueColor: AlwaysStoppedAnimation<Color>(probColor),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${ds.conversionProbability.toInt()}%',
+                            style: TextStyle(fontSize: 12, color: probColor, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+
+              // Sales Priority Card
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: BankerColors.line2),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2)),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('SALES PRIORITY', style: TextStyle(fontSize: 9, color: BankerColors.muted2, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      _buildPriorityBadge(ds.salesPriority),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Positive Drivers & Friction Factors Split
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Positive Drivers
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.trending_up_rounded, size: 16, color: BankerColors.green),
+                        SizedBox(width: 6),
+                        Text(
+                          'Positive Drivers',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: BankerColors.green),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    if (positives.isEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: BankerColors.cream,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text('No positive drivers detected.', style: TextStyle(fontSize: 11, color: BankerColors.muted2)),
+                      )
+                    else
+                      ...positives.map((pos) {
+                        final map = pos as Map;
+                        final name = map['label'] ?? map['key'] ?? '';
+                        final optionLabel = map['option_label'] ?? '';
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 6),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF0FDF4),
+                            border: Border.all(color: const Color(0xFFDCFCE7)),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('✦ ', style: TextStyle(color: BankerColors.green, fontWeight: FontWeight.bold, fontSize: 12)),
+                              Expanded(
+                                child: Text(
+                                  optionLabel.isNotEmpty ? '$name: $optionLabel' : '$name',
+                                  style: const TextStyle(fontSize: 11, color: Color(0xFF166534), height: 1.3),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 14),
+
+              // Friction/Risk Factors
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.report_problem_outlined, size: 16, color: const Color(0xFFE0533C)),
+                        SizedBox(width: 6),
+                        Text(
+                          'Risk & Friction Factors',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFFE0533C)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    if (negatives.isEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: BankerColors.cream,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text('No friction factors detected.', style: TextStyle(fontSize: 11, color: BankerColors.muted2)),
+                      )
+                    else
+                      ...negatives.map((neg) {
+                        final map = neg as Map;
+                        final name = map['label'] ?? map['key'] ?? '';
+                        final optionLabel = map['option_label'] ?? '';
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 6),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            border: Border.all(color: const Color(0xFFFEE2E2)),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('⚠ ', style: TextStyle(color: const Color(0xFFE0533C), fontWeight: FontWeight.bold, fontSize: 12)),
+                              Expanded(
+                                child: Text(
+                                  optionLabel.isNotEmpty ? '$name: $optionLabel' : '$name',
+                                  style: const TextStyle(fontSize: 11, color: Color(0xFF991B1B), height: 1.3),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          const SizedBox(height: 12),
+
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'MODEL SCORING PARAMETERS (SIMULATION SANDBOX)',
+                style: TextStyle(fontSize: 10, color: BankerColors.muted2, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+              ),
+              Row(
+                children: [
+                  OutlinedButton(
+                    onPressed: _isSandboxDirty ? () => _runDsScoring(useSimulation: false) : null,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      side: BorderSide(color: _isSandboxDirty ? BankerColors.muted : BankerColors.muted.withOpacity(0.3)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    ),
+                    child: Text(
+                      'Reset Override',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: _isSandboxDirty ? BankerColors.muted : BankerColors.muted.withOpacity(0.3),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: _isSandboxDirty ? () => _runDsScoring(useSimulation: true) : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _isSandboxDirty ? BankerColors.blue : BankerColors.blue.withOpacity(0.3),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    ),
+                    child: Text(
+                      'Apply Simulation',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: _isSandboxDirty ? Colors.white : Colors.white.withOpacity(0.6),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _buildEditableFeaturesTable(ds.scoreBreakdownJson, ds.isEngagementSchema),
+
+        ],
+      ),
+    );
+  }
+
   Widget _buildSuggestedQuestionsTab(CrmProspect prospect) {
     if (_loadingQuestions) {
       return const Padding(
@@ -3572,12 +4053,497 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
               ),
             ],
           ),
-        )),
+        )).toList(),
       ],
     );
   }
 
+  Widget _buildEditableFeaturesTable(Map<String, dynamic> scoreBreakdownJson, bool isEngagement) {
+    final featuresList = scoreBreakdownJson['features'] as List? ?? [];
 
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: BankerColors.line2),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Table(
+        columnWidths: const {
+          0: FlexColumnWidth(4),
+          1: FlexColumnWidth(5),
+        },
+        border: TableBorder.symmetric(
+          inside: const BorderSide(color: Color(0xFFF1F5F9), width: 1),
+        ),
+        children: [
+          // Header
+          const TableRow(
+            decoration: BoxDecoration(
+              color: Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(10),
+                topRight: Radius.circular(10),
+              ),
+            ),
+            children: [
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Text(
+                  'PARAMETER / WEIGHT',
+                  style: TextStyle(fontSize: 10, color: BankerColors.muted2, fontWeight: FontWeight.bold),
+                ),
+              ),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Text(
+                  'SIMULATED VALUE',
+                  style: TextStyle(fontSize: 10, color: BankerColors.muted2, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+
+          // Rows
+          ...featuresList.map((f) {
+            final map = f as Map;
+            final key = map['key'] as String? ?? '';
+            final label = map['label'] as String? ?? '';
+            final weight = map['weight'] as num? ?? 0;
+            final currentOption = map['option_label'] as String? ?? 'Missing';
+
+            final options = getOptionsForKey(key);
+            final displayValue = _getDisplayValueForSchemaKey(key, currentOption);
+
+            return TableRow(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: BankerColors.ink),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Weight: $weight%',
+                        style: const TextStyle(fontSize: 10, color: BankerColors.muted2),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: options.isEmpty
+                      ? Align(
+                          alignment: Alignment.centerLeft,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8.0),
+                            child: Text(
+                              currentOption,
+                              style: const TextStyle(fontSize: 11, color: BankerColors.muted2, fontStyle: FontStyle.italic),
+                            ),
+                          ),
+                        )
+                      : Container(
+                          height: 38,
+                          alignment: Alignment.centerLeft,
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: options.contains(displayValue) ? displayValue : options.first,
+                              icon: const Icon(Icons.arrow_drop_down, color: BankerColors.blue, size: 20),
+                              isExpanded: true,
+                              dropdownColor: Colors.white,
+                              style: const TextStyle(fontSize: 11, color: BankerColors.blue, fontWeight: FontWeight.w600),
+                              items: options.map((opt) {
+                                return DropdownMenuItem<String>(
+                                  value: opt,
+                                  child: Text(opt, style: const TextStyle(fontSize: 11, color: BankerColors.ink)),
+                                );
+                              }).toList(),
+                              onChanged: (newVal) {
+                                if (newVal != null) {
+                                  setState(() {
+                                    _updateRawFeaturesFromOption(key, newVal);
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                ),
+              ],
+            );
+          }).toList(),
+        ],
+      ),
+    );
+  }
+
+  List<String> getOptionsForKey(String key) {
+    switch (key) {
+      case 'intent':
+        return [
+          'Treasury Management',
+          'Merchant / Commerce Services',
+          'Credit / Startup Financing',
+          'Payments (Payables & Receivables)',
+          'Commercial Cards / Expense Management',
+          'International / FX / Cross-Border',
+          'Trade & Working Capital',
+          'Core Banking (general)',
+          'General Inquiry / Unspecified'
+        ];
+      case 'revenue':
+        return [
+          'Pre-revenue',
+          '< \$500K ARR',
+          '\$500K – \$1M ARR',
+          '\$1M – \$2M ARR',
+          '\$2M – \$5M ARR',
+          '\$5M – \$20M ARR',
+          '\$20M+ ARR'
+        ];
+      case 'runway':
+        return [
+          '< 6 Months',
+          '6 – 12 Months',
+          '12 – 18 Months',
+          '18 – 24 Months',
+          '24+ Months / Profitable'
+        ];
+      case 'funding':
+        return [
+          'Bootstrapped / Pre-Seed',
+          'Seed',
+          'Series A',
+          'Series B',
+          'Series C+',
+          'Public / IPO'
+        ];
+      case 'investor':
+        return [
+          'No Institutional Investor',
+          'Tier 3 / Angel',
+          'Tier 2 VC',
+          'Tier 1 VC'
+        ];
+      case 'profitability':
+        return [
+          'Significant Losses',
+          'Moderate Losses',
+          'Near Breakeven',
+          'Profitable'
+        ];
+      case 'next_raise':
+        return [
+          'Not Planning to Raise',
+          '12+ Months Out',
+          '6 – 12 Months',
+          'Within 6 Months'
+        ];
+      case 'international':
+        return [
+          'Domestic Only',
+          'One Additional Country',
+          'Multiple Countries',
+          'Global Operations'
+        ];
+      case 'credit_need':
+        return ['No', 'Yes'];
+      case 'strategic_priority':
+        return [
+          'Product / MVP Build-Out',
+          'Compliance',
+          'Cost Reduction',
+          'Efficiency',
+          'Risk Management',
+          'Expansion'
+        ];
+      case 'financial_bottleneck':
+        return [
+          'None',
+          'FX Volatility',
+          'Payment Delays',
+          'Access to Credit',
+          'Cash Flow'
+        ];
+      case 'pipeline_stage':
+        return [
+          'Closed Lost',
+          'New Lead',
+          'MQL',
+          'SQL',
+          'Opportunity',
+          'Negotiation',
+          'Closed Won'
+        ];
+      case 'sales_readiness':
+        return [
+          'Neither demo nor budget confirmed',
+          'One of demo requested / budget confirmed',
+          'Demo requested and budget confirmed'
+        ];
+      case 'decision_maker':
+        return ['Not yet identified', 'Identified'];
+      case 'competitive_risk':
+        return ['No competitor mentioned', 'Competitor mentioned'];
+      default:
+        return [];
+    }
+  }
+
+  String _getDisplayValueForSchemaKey(String key, String currentOption) {
+    switch (key) {
+      case 'intent':
+        final val = _simulatedFeatures['primary_intent'];
+        if (val != null) return _mapRawIntentToOption(val.toString());
+        break;
+      case 'revenue':
+        final val = _simulatedFeatures['annual_revenue'];
+        if (val != null) return _mapRawRevenueToOption(val);
+        break;
+      case 'runway':
+        final val = _simulatedFeatures['runway_months'];
+        if (val != null) return _mapRawRunwayToOption(val);
+        break;
+      case 'funding':
+        final val = _simulatedFeatures['last_round_stage'];
+        if (val != null) return val.toString();
+        break;
+      case 'investor':
+        final t1 = _simulatedFeatures['tier_1_investor_flag'];
+        final type = _simulatedFeatures['investor_types'];
+        return _mapRawInvestorToOption(t1, type);
+      case 'profitability':
+        final val = _simulatedFeatures['profitability_status'];
+        if (val != null) return val.toString();
+        break;
+      case 'next_raise':
+        final f6 = _simulatedFeatures['fundraising_within_6_months_flag'];
+        final timing = _simulatedFeatures['next_raise_timing'];
+        return _mapRawNextRaiseToOption(f6, timing);
+      case 'international':
+        final exposure = _simulatedFeatures['fx_exposure_level'];
+        final mc = _simulatedFeatures['multi_currency_flag'];
+        return _mapRawInternationalToOption(exposure, mc);
+      case 'credit_need':
+        final val = _simulatedFeatures['credit_need_flag'];
+        if (val != null) return (val == true || val == 'true') ? 'Yes' : 'No';
+        break;
+      case 'strategic_priority':
+        final val = _simulatedFeatures['top_priority_1'];
+        if (val != null) return val.toString();
+        break;
+      case 'financial_bottleneck':
+        final val = _simulatedFeatures['primary_financial_bottleneck'];
+        if (val != null) return val.toString();
+        break;
+      case 'pipeline_stage':
+        final val = _simulatedFeatures['crm_pipeline_stage'];
+        if (val != null) return val.toString();
+        break;
+      case 'sales_readiness':
+        final demo = _simulatedFeatures['demo_requested'];
+        final budget = _simulatedFeatures['budget_confirmed_flag'];
+        return _mapRawSalesReadinessToOption(demo, budget);
+      case 'decision_maker':
+        final val = _simulatedFeatures['decision_maker_identified_flag'];
+        if (val != null) return (val == true || val == 'true') ? 'Identified' : 'Not yet identified';
+        break;
+      case 'competitive_risk':
+        final val = _simulatedFeatures['competitor_mentioned_flag'];
+        if (val != null) return (val == true || val == 'true') ? 'Competitor mentioned' : 'No competitor mentioned';
+        break;
+    }
+    return currentOption;
+  }
+
+  String _mapRawIntentToOption(String raw) {
+    final t = raw.replaceAll('_', ' ').toLowerCase();
+    if (t.contains('treasury') || t.contains('cash management') || t.contains('sweep')) return 'Treasury Management';
+    if (t.contains('credit') || t.contains('financing') || t.contains('loan') || t.contains('debt')) return 'Credit / Startup Financing';
+    if (t.contains('merchant') || t.contains('commerce') || t.contains('card program')) return 'Merchant / Commerce Services';
+    if (t.contains('payment') || t.contains('payable') || t.contains('receivable') || t.contains('ach') || t.contains('invoicing')) return 'Payments (Payables & Receivables)';
+    if (t.contains('fx') || t.contains('international') || t.contains('cross-border') || t.contains('multi-currency')) return 'International / FX / Cross-Border';
+    if (t.contains('trade') || t.contains('working capital')) return 'Trade & Working Capital';
+    return 'General Inquiry / Unspecified';
+  }
+
+  String _mapRawRevenueToOption(dynamic raw) {
+    if (raw == null) return 'Pre-revenue';
+    final s = raw.toString().toLowerCase();
+    if (s.contains('pre-revenue')) return 'Pre-revenue';
+    if (s.contains('< \$500k')) return '< \$500K ARR';
+    if (s.contains('500k – \$1m') || s.contains('500k - \$1m')) return '\$500K – \$1M ARR';
+    if (s.contains('1m – \$2m') || s.contains('1m - \$2m')) return '\$1M – \$2M ARR';
+    if (s.contains('2m – \$5m') || s.contains('2m - \$5m')) return '\$2M – \$5M ARR';
+    if (s.contains('5m – \$20m') || s.contains('5m - \$20m')) return '\$5M – \$20M ARR';
+    if (s.contains('20m+')) return '\$20M+ ARR';
+
+    final clean = s.replaceAll(RegExp(r'[^\d.]'), '');
+    final val = double.tryParse(clean);
+    if (val == null || val <= 0) return 'Pre-revenue';
+    if (val < 500000) return '< \$500K ARR';
+    if (val < 1000000) return '\$500K – \$1M ARR';
+    if (val < 2000000) return '\$1M – \$2M ARR';
+    if (val < 5000000) return '\$2M – \$5M ARR';
+    if (val < 20000000) return '\$5M – \$20M ARR';
+    return '\$20M+ ARR';
+  }
+
+  String _mapRawRunwayToOption(dynamic raw) {
+    if (raw == null) return '6 – 12 Months';
+    final s = raw.toString();
+    final val = double.tryParse(s.replaceAll(RegExp(r'[^\d.]'), ''));
+    if (val == null) return '6 – 12 Months';
+    if (val < 6) return '< 6 Months';
+    if (val < 12) return '6 – 12 Months';
+    if (val < 18) return '12 – 18 Months';
+    if (val < 24) return '18 – 24 Months';
+    return '24+ Months / Profitable';
+  }
+
+  String _mapRawInvestorToOption(dynamic t1, dynamic type) {
+    final isT1 = (t1 == true || t1 == 'true');
+    if (isT1) return 'Tier 1 VC';
+    final t = type?.toString().toLowerCase() ?? '';
+    if (t.contains('angel') || t.contains('family office')) return 'Tier 3 / Angel';
+    if (t.contains('venture') || t.contains('corporate') || t.contains('strategic')) return 'Tier 2 VC';
+    return 'No Institutional Investor';
+  }
+
+  String _mapRawNextRaiseToOption(dynamic f6, dynamic timing) {
+    final isF6 = (f6 == true || f6 == 'true');
+    if (isF6) return 'Within 6 Months';
+    final t = timing?.toString().toLowerCase() ?? '';
+    if (t.contains('currently raising') || t.contains('within 6 months')) return 'Within 6 Months';
+    if (t.contains('6 – 12 months') || t.contains('6-12 months')) return '6 – 12 Months';
+    if (t.contains('12+ months') || t.contains('12-15 months') || t.contains('15 months')) return '12+ Months Out';
+    return 'Not Planning to Raise';
+  }
+
+  String _mapRawInternationalToOption(dynamic exposure, dynamic mc) {
+    final exp = exposure?.toString().toLowerCase() ?? '';
+    if (exp.contains('material') || exp.contains('global')) return 'Global Operations';
+    if (exp.contains('significant')) return 'Multiple Countries';
+    if (exp.contains('minor')) return 'One Additional Country';
+    if (exp.contains('none')) return 'Domestic Only';
+    final isMc = (mc == true || mc == 'true');
+    if (isMc) return 'Multiple Countries';
+    return 'Domestic Only';
+  }
+
+  String _mapRawSalesReadinessToOption(dynamic demo, dynamic budget) {
+    final isDemo = (demo == true || demo == 'true');
+    final isBudget = (budget == true || budget == 'true');
+    if (isDemo && isBudget) return 'Demo requested and budget confirmed';
+    if (isDemo || isBudget) return 'One of demo requested / budget confirmed';
+    return 'Neither demo nor budget confirmed';
+  }
+
+  void _updateRawFeaturesFromOption(String key, String selectedOption) {
+    setState(() {
+      _isSandboxDirty = true;
+    });
+    switch (key) {
+      case 'intent':
+        _simulatedFeatures['primary_intent'] = selectedOption;
+        break;
+      case 'revenue':
+        _simulatedFeatures['annual_revenue'] = selectedOption;
+        break;
+      case 'runway':
+        if (selectedOption == '< 6 Months') _simulatedFeatures['runway_months'] = 3;
+        else if (selectedOption == '6 – 12 Months') _simulatedFeatures['runway_months'] = 9;
+        else if (selectedOption == '12 – 18 Months') _simulatedFeatures['runway_months'] = 15;
+        else if (selectedOption == '18 – 24 Months') _simulatedFeatures['runway_months'] = 20;
+        else _simulatedFeatures['runway_months'] = 26;
+        break;
+      case 'funding':
+        _simulatedFeatures['last_round_stage'] = selectedOption;
+        break;
+      case 'investor':
+        if (selectedOption == 'No Institutional Investor') {
+          _simulatedFeatures['tier_1_investor_flag'] = false;
+          _simulatedFeatures['investor_types'] = '';
+        } else if (selectedOption == 'Tier 3 / Angel') {
+          _simulatedFeatures['tier_1_investor_flag'] = false;
+          _simulatedFeatures['investor_types'] = 'Angel';
+        } else if (selectedOption == 'Tier 2 VC') {
+          _simulatedFeatures['tier_1_investor_flag'] = false;
+          _simulatedFeatures['investor_types'] = 'Venture';
+        } else {
+          _simulatedFeatures['tier_1_investor_flag'] = true;
+          _simulatedFeatures['investor_types'] = 'crossover';
+        }
+        break;
+      case 'profitability':
+        _simulatedFeatures['profitability_status'] = selectedOption;
+        break;
+      case 'next_raise':
+        if (selectedOption == 'Not Planning to Raise') {
+          _simulatedFeatures['fundraising_within_6_months_flag'] = false;
+          _simulatedFeatures['next_raise_timing'] = 'Not planning';
+        } else if (selectedOption == '12+ Months Out') {
+          _simulatedFeatures['fundraising_within_6_months_flag'] = false;
+          _simulatedFeatures['next_raise_timing'] = '15 months';
+        } else if (selectedOption == '6 – 12 Months') {
+          _simulatedFeatures['fundraising_within_6_months_flag'] = false;
+          _simulatedFeatures['next_raise_timing'] = '9 months';
+        } else {
+          _simulatedFeatures['fundraising_within_6_months_flag'] = true;
+          _simulatedFeatures['next_raise_timing'] = 'currently raising';
+        }
+        break;
+      case 'international':
+        if (selectedOption == 'Domestic Only') {
+          _simulatedFeatures['fx_exposure_level'] = 'None';
+          _simulatedFeatures['multi_currency_flag'] = false;
+        } else if (selectedOption == 'One Additional Country') {
+          _simulatedFeatures['fx_exposure_level'] = 'Minor';
+          _simulatedFeatures['multi_currency_flag'] = false;
+        } else if (selectedOption == 'Multiple Countries') {
+          _simulatedFeatures['fx_exposure_level'] = 'Significant';
+          _simulatedFeatures['multi_currency_flag'] = true;
+        } else {
+          _simulatedFeatures['fx_exposure_level'] = 'Material';
+          _simulatedFeatures['multi_currency_flag'] = true;
+        }
+        break;
+      case 'credit_need':
+        _simulatedFeatures['credit_need_flag'] = (selectedOption == 'Yes');
+        break;
+      case 'strategic_priority':
+        _simulatedFeatures['top_priority_1'] = selectedOption;
+        break;
+      case 'financial_bottleneck':
+        _simulatedFeatures['primary_financial_bottleneck'] = selectedOption;
+        break;
+      case 'pipeline_stage':
+        _simulatedFeatures['crm_pipeline_stage'] = selectedOption;
+        break;
+      case 'sales_readiness':
+        if (selectedOption == 'Neither demo nor budget confirmed') {
+          _simulatedFeatures['demo_requested'] = false;
+          _simulatedFeatures['budget_confirmed_flag'] = false;
+        } else if (selectedOption == 'One of demo requested / budget confirmed') {
+          _simulatedFeatures['demo_requested'] = true;
+          _simulatedFeatures['budget_confirmed_flag'] = false;
+        } else {
+          _simulatedFeatures['demo_requested'] = true;
+          _simulatedFeatures['budget_confirmed_flag'] = true;
+        }
+        break;
+      case 'decision_maker':
+        _simulatedFeatures['decision_maker_identified_flag'] = (selectedOption == 'Identified');
+        break;
+      case 'competitive_risk':
+        _simulatedFeatures['competitor_mentioned_flag'] = (selectedOption == 'Competitor mentioned');
+        break;
+    }
+  }
 
   // --- ACTIONS MODALS INSIDE PANEL ---
 
@@ -4095,6 +5061,10 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
   // Active hover row
   int? _hoveredIndex;
 
+  // DS pipeline scoring state — tracks which prospect IDs are currently being scored
+  final Set<String> _scoringProspectIds = {};
+  bool _scoringAll = false; // true when "Score All" is running
+
   // Text controller for search
   final TextEditingController _searchController = TextEditingController();
 
@@ -4120,6 +5090,46 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
 
   void _onServiceUpdate() {
     if (mounted) setState(() {});
+  }
+
+  /// Triggers the DS pipeline for a single prospect and refreshes the list on completion.
+  Future<void> _runDsPipelineForProspect(String prospectId) async {
+    if (_scoringProspectIds.contains(prospectId)) return;
+    setState(() => _scoringProspectIds.add(prospectId));
+    try {
+      await ConversationService().runProspectDataScience(prospectId);
+      await ref.read(bankerProspectsProvider.notifier).loadProspects();
+    } catch (e) {
+      debugPrint('DS pipeline failed for $prospectId: $e');
+    } finally {
+      if (mounted) setState(() => _scoringProspectIds.remove(prospectId));
+    }
+  }
+
+  /// Triggers the DS pipeline for ALL currently-listed prospects sequentially.
+  Future<void> _runAllDsPipeline() async {
+    if (_scoringAll) return;
+    final prospects = ref.read(bankerProspectsProvider);
+    final listed = _getFilteredAndSortedProspects(prospects);
+    if (listed.isEmpty) return;
+    setState(() => _scoringAll = true);
+    try {
+      for (final p in listed) {
+        if (!mounted) break;
+        setState(() => _scoringProspectIds.add(p.id));
+        try {
+          await ConversationService().runProspectDataScience(p.id);
+        } catch (e) {
+          debugPrint('DS pipeline failed for ${p.id}: $e');
+        } finally {
+          if (mounted) setState(() => _scoringProspectIds.remove(p.id));
+        }
+      }
+      // Final refresh after all done
+      if (mounted) await ref.read(bankerProspectsProvider.notifier).loadProspects();
+    } finally {
+      if (mounted) setState(() => _scoringAll = false);
+    }
   }
 
   // --- FILTER & SORT LOGIC ---
@@ -4239,19 +5249,41 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
     final activeBanker = ref.watch(activeBankerProvider);
     final allProspects = ref.watch(bankerProspectsProvider);
 
+    final List<Banker> navbarBankers = [
+      ...(bankersAsync.value ?? []),
+      const Banker(
+        bankerId: 'datascience',
+        email: 'datascience@convpredict.ai',
+        name: 'Data Science View',
+        position: 'Model & Conv Intelligence',
+        role: 'datascience',
+      ),
+    ];
+
     // Auto-select banker with persistence
     bankersAsync.whenData((bankers) {
-      final hasActiveBanker = activeBanker != null && bankers.any((b) => b.bankerId == activeBanker.bankerId);
+      final hasActiveBanker = activeBanker != null && 
+          (activeBanker.bankerId == 'datascience' || bankers.any((b) => b.bankerId == activeBanker.bankerId));
       if (!hasActiveBanker && bankers.isNotEmpty) {
         WidgetsBinding.instance.addPostFrameCallback((_) async {
           final savedId = await ProspectStorage().getActiveBankerId();
           if (savedId != null) {
-            final savedBanker = bankers.firstWhere(
-              (b) => b.bankerId == savedId,
-              orElse: () => bankers.first,
-            );
-            ref.read(activeBankerProvider.notifier).state = savedBanker;
-            ProspectStorage().saveActiveBanker(savedBanker);
+            if (savedId == 'datascience') {
+              ref.read(activeBankerProvider.notifier).state = const Banker(
+                bankerId: 'datascience',
+                email: 'datascience@convpredict.ai',
+                name: 'Data Science View',
+                position: 'Model & Conv Intelligence',
+                role: 'datascience',
+              );
+            } else {
+              final savedBanker = bankers.firstWhere(
+                (b) => b.bankerId == savedId,
+                orElse: () => bankers.first,
+              );
+              ref.read(activeBankerProvider.notifier).state = savedBanker;
+              ProspectStorage().saveActiveBanker(savedBanker);
+            }
           } else {
             ref.read(activeBankerProvider.notifier).state = bankers.first;
             ProspectStorage().saveActiveBanker(bankers.first);
@@ -4263,6 +5295,7 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
     // Filter prospects by active banker
     final prospects = allProspects.where((p) {
       if (activeBanker == null) return true;
+      if (activeBanker.bankerId == 'datascience') return true;
       return p.bankerId == activeBanker.bankerId;
     }).toList();
 
@@ -4329,7 +5362,7 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
           initials: initials,
           isBankerView: true,
           activeLabel: 'Banker View',
-          bankers: bankersAsync.value ?? [],
+          bankers: navbarBankers,
           activeBanker: activeBanker,
           onBankerSelected: (banker) {
             ref.read(activeBankerProvider.notifier).state = banker;
@@ -4346,12 +5379,12 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
         ),
       ),
       body: Stack(
-        children: [
+              children: [
           // Main content
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (_notifService.activeHubNotifications.isNotEmpty)
+              if (activeBanker?.bankerId != 'datascience' && _notifService.activeHubNotifications.isNotEmpty)
                 NotificationsSection(
                   isBanker: true,
                   prospectName: targetProspect.name,
@@ -4361,14 +5394,15 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                 ),
 
               // 1. SUMMARY BAR
-              _buildSummaryBar(
-                isMobile: isMobile,
-                activeCount: activeCount,
-                needsActionCount: needsActionCount,
-                callsCount: callsCount,
-                awaitingDocsCount: awaitingDocsCount,
-                onboardedCount: onboardedCount,
-              ),
+              if (activeBanker?.bankerId != 'datascience')
+                _buildSummaryBar(
+                  isMobile: isMobile,
+                  activeCount: activeCount,
+                  needsActionCount: needsActionCount,
+                  callsCount: callsCount,
+                  awaitingDocsCount: awaitingDocsCount,
+                  onboardedCount: onboardedCount,
+                ),
 
               // 2. TOOLBAR
               _buildToolbar(isMobile, prospects),
@@ -4626,6 +5660,45 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
 
   Widget _buildToolbar(bool isMobile, List<CrmProspect> prospects) {
     final activeBanker = ref.watch(activeBankerProvider);
+    if (activeBanker?.bankerId == 'datascience') {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          border: Border(bottom: BorderSide(color: BankerColors.line2, width: 1)),
+        ),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Container(
+            width: 280,
+            height: 32,
+            decoration: BoxDecoration(
+              color: BankerColors.cream,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: BankerColors.line2),
+            ),
+            child: TextField(
+              controller: _searchController,
+              onChanged: (val) {
+                setState(() {
+                  _searchQuery = val;
+                });
+              },
+              style: const TextStyle(fontSize: 12, color: BankerColors.ink),
+              decoration: const InputDecoration(
+                hintText: 'Search prospects…',
+                hintStyle: TextStyle(color: BankerColors.muted2, fontSize: 12),
+                prefixIcon: Icon(Icons.search, size: 16, color: BankerColors.muted2),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.symmetric(vertical: 8),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     final isManager = activeBanker?.role == 'manager';
 
     final hasWaiting = prospects.any((p) => p.status.toLowerCase().contains('waiting'));
@@ -4711,7 +5784,40 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                   ),
                   child: const Text('+ Create Banker', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                 ),
+                const SizedBox(width: 8),
               ],
+              // ⚡ Score All — visible to everyone, runs DS pipeline for every listed prospect
+              Tooltip(
+                message: _scoringAll
+                    ? 'Scoring in progress… each prospect is processed one by one'
+                    : 'Run DS pipeline for all listed prospects',
+                child: ElevatedButton.icon(
+                  onPressed: _scoringAll ? null : _runAllDsPipeline,
+                  icon: _scoringAll
+                      ? const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Icon(Icons.bolt_rounded, size: 14),
+                  label: Text(
+                    _scoringAll ? 'Scoring…' : 'Score All',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1D4ED8),
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: const Color(0xFF93C5FD),
+                    disabledForegroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ),
             ],
           ),
         ],
@@ -4794,12 +5900,13 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
           child: Row(
             children: [
               _buildHeaderCell('Company', flex: 3),
+              _buildHeaderCell('Lead', flex: 2),
+              _buildHeaderCell('Probability', flex: 2),
+              _buildHeaderCell('Priority', flex: 2),
               _buildHeaderCell('Status', flex: 2),
               _buildHeaderCell('Profile', flex: 2),
               _buildHeaderCell('Docs', flex: 2),
-              _buildHeaderCell('Materials read', flex: 2),
-              _buildHeaderCell('Last active', flex: 2),
-              _buildHeaderCell('Actions', flex: 2, sortable: false),
+              _buildHeaderCell('Actions', flex: 3, sortable: false),
             ],
           ),
         ),
@@ -4903,6 +6010,34 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                                 ),
                               ),
 
+                              // Lead
+                              Expanded(
+                                flex: 2,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  alignment: Alignment.centerLeft,
+                                  child: _buildLeadBadge(prospect.leadTemperature),
+                                ),
+                              ),
+                              // Probability
+                              Expanded(
+                                flex: 2,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  alignment: Alignment.centerLeft,
+                                  child: _buildProbabilityCell(prospect.conversionProbability),
+                                ),
+                              ),
+                              // Priority
+                              Expanded(
+                                flex: 2,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  alignment: Alignment.centerLeft,
+                                  child: _buildPriorityBadge(prospect.salesPriority),
+                                ),
+                              ),
+
                               // Status
                               Expanded(
                                 flex: 2,
@@ -4952,95 +6087,68 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                                   child: _buildDocsBadge(prospect),
                                 ),
                               ),
-                              // Materials
-                              Expanded(
-                                flex: 2,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                                  alignment: Alignment.centerLeft,
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Text(prospect.materialsReadText, style: const TextStyle(fontSize: 11, color: BankerColors.ink)),
-                                      if (prospect.materialsReadSub.isNotEmpty)
-                                        Text(
-                                          prospect.materialsReadSub,
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            color: prospect.materialsReadSub.contains('✓') ? BankerColors.green : BankerColors.muted2,
-                                            fontWeight: prospect.materialsReadSub.contains('✓') ? FontWeight.w600 : FontWeight.normal,
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              // Last Active
-                              Expanded(
-                                flex: 2,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                                  alignment: Alignment.centerLeft,
-                                  child: Text(prospect.lastActive, style: const TextStyle(fontSize: 11, color: BankerColors.ink)),
-                                ),
-                              ),
                               // Actions
                               Expanded(
-                                flex: 2,
+                                flex: 3,
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
                                   alignment: Alignment.centerLeft,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      GestureDetector(
-                                        onTap: () {
-                                          setState(() {
-                                            _showFloatingChatbot = true;
-                                            _floatingChatbotProspectId = prospect.id;
-                                            _floatingChatbotLockDropdown = true;
-                                          });
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                                          decoration: BoxDecoration(
-                                            color: Colors.white,
-                                            border: Border.all(color: BankerColors.line2),
-                                            borderRadius: BorderRadius.circular(6),
-                                          ),
-                                          child: Text(
-                                            prospect.status.contains('Waiting') ? 'Nudge' : 'Message',
-                                            style: const TextStyle(fontSize: 10, color: BankerColors.ink, fontWeight: FontWeight.bold),
-                                          ),
-                                        ),
-                                      ),
-                                      if (activeBanker?.role == 'manager') ...[
-                                        const SizedBox(width: 4),
-                                        PopupMenuButton<String>(
-                                          icon: const Icon(Icons.more_vert, size: 16, color: BankerColors.muted),
-                                          padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(),
-                                          onSelected: (val) {
-                                            if (val == 'reassign') {
-                                              _showReassignProspectDialog(prospect);
-                                            } else if (val == 'unassign') {
-                                              _unassignProspect(prospect);
-                                            }
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        GestureDetector(
+                                          onTap: () {
+                                            setState(() {
+                                              _showFloatingChatbot = true;
+                                              _floatingChatbotProspectId = prospect.id;
+                                              _floatingChatbotLockDropdown = true;
+                                            });
                                           },
-                                          itemBuilder: (ctx) => [
-                                            const PopupMenuItem(
-                                              value: 'reassign',
-                                              child: Text('Reassign Prospect', style: TextStyle(fontSize: 12)),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              border: Border.all(color: BankerColors.line2),
+                                              borderRadius: BorderRadius.circular(6),
                                             ),
-                                            const PopupMenuItem(
-                                              value: 'unassign',
-                                              child: Text('Unassign Prospect', style: TextStyle(fontSize: 12, color: Colors.red)),
+                                            child: Text(
+                                              prospect.status.contains('Waiting') ? 'Nudge' : 'Message',
+                                              style: const TextStyle(fontSize: 10, color: BankerColors.ink, fontWeight: FontWeight.bold),
                                             ),
-                                          ],
+                                          ),
                                         ),
+                                        const SizedBox(width: 4),
+                                        // DS Pipeline button — shows when no scores yet, spinner while running
+                                        _buildDsScoreButton(prospect),
+                                        if (activeBanker?.role == 'manager') ...[
+                                          const SizedBox(width: 4),
+                                          PopupMenuButton<String>(
+                                            icon: const Icon(Icons.more_vert, size: 16, color: BankerColors.muted),
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
+                                            onSelected: (val) {
+                                              if (val == 'reassign') {
+                                                _showReassignProspectDialog(prospect);
+                                              } else if (val == 'unassign') {
+                                                _unassignProspect(prospect);
+                                              }
+                                            },
+                                            itemBuilder: (ctx) => [
+                                              const PopupMenuItem(
+                                                value: 'reassign',
+                                                child: Text('Reassign Prospect', style: TextStyle(fontSize: 12)),
+                                              ),
+                                              const PopupMenuItem(
+                                                value: 'unassign',
+                                                child: Text('Unassign Prospect', style: TextStyle(fontSize: 12, color: Colors.red)),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
                                       ],
-                                    ],
+                                    ),
                                   ),
                                 ),
                               ),
@@ -5053,6 +6161,59 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
                 ),
         ),
       ],
+    );
+  }
+
+  /// Inline DS pipeline button for the Actions cell.
+  /// - Shows nothing if scores already exist (leadTemperature != null).
+  /// - Shows a spinner while the pipeline is running for this prospect.
+  /// - Shows a ⚡ "Score" button otherwise.
+  Widget _buildDsScoreButton(CrmProspect prospect) {
+    final isScoring = _scoringProspectIds.contains(prospect.id);
+    final alreadyScored = prospect.leadTemperature != null;
+
+    if (isScoring) {
+      return const Tooltip(
+        message: 'Running DS pipeline…',
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation<Color>(BankerColors.blue),
+          ),
+        ),
+      );
+    }
+
+    return Tooltip(
+      message: alreadyScored ? 'Recalculate DS scores' : 'Run DS pipeline to score this prospect',
+      child: GestureDetector(
+        onTap: () => _runDsPipelineForProspect(prospect.id),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: BoxDecoration(
+            color: alreadyScored ? BankerColors.cream : const Color(0xFFEFF6FF),
+            border: Border.all(color: alreadyScored ? BankerColors.line2 : BankerColors.blue),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                alreadyScored ? Icons.refresh_rounded : Icons.bolt_rounded,
+                size: 13,
+                color: BankerColors.blue,
+              ),
+              const SizedBox(width: 3),
+              Text(
+                alreadyScored ? 'Rescore' : 'Score',
+                style: const TextStyle(fontSize: 10, color: BankerColors.blue, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -5085,6 +6246,8 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
       ),
     );
   }
+
+
 
   Widget _buildStatusBadge(String status) {
     Color bg = BankerColors.purpleSoft;
@@ -6308,19 +7471,41 @@ class _BankerDetailPageState extends ConsumerState<BankerDetailPage> {
     final bankersAsync = ref.watch(bankersProvider);
     final activeBanker = ref.watch(activeBankerProvider);
 
+    final List<Banker> navbarBankers = [
+      ...(bankersAsync.value ?? []),
+      const Banker(
+        bankerId: 'datascience',
+        email: 'datascience@convpredict.ai',
+        name: 'Data Science View',
+        position: 'Model & Conv Intelligence',
+        role: 'datascience',
+      ),
+    ];
+
     // Auto-select banker with persistence
     bankersAsync.whenData((bankers) {
-      final hasActiveBanker = activeBanker != null && bankers.any((b) => b.bankerId == activeBanker.bankerId);
+      final hasActiveBanker = activeBanker != null && 
+          (activeBanker.bankerId == 'datascience' || bankers.any((b) => b.bankerId == activeBanker.bankerId));
       if (!hasActiveBanker && bankers.isNotEmpty) {
         WidgetsBinding.instance.addPostFrameCallback((_) async {
           final savedId = await ProspectStorage().getActiveBankerId();
           if (savedId != null) {
-            final savedBanker = bankers.firstWhere(
-              (b) => b.bankerId == savedId,
-              orElse: () => bankers.first,
-            );
-            ref.read(activeBankerProvider.notifier).state = savedBanker;
-            ProspectStorage().saveActiveBanker(savedBanker);
+            if (savedId == 'datascience') {
+              ref.read(activeBankerProvider.notifier).state = const Banker(
+                bankerId: 'datascience',
+                email: 'datascience@convpredict.ai',
+                name: 'Data Science View',
+                position: 'Model & Conv Intelligence',
+                role: 'datascience',
+              );
+            } else {
+              final savedBanker = bankers.firstWhere(
+                (b) => b.bankerId == savedId,
+                orElse: () => bankers.first,
+              );
+              ref.read(activeBankerProvider.notifier).state = savedBanker;
+              ProspectStorage().saveActiveBanker(savedBanker);
+            }
           } else {
             ref.read(activeBankerProvider.notifier).state = bankers.first;
             ProspectStorage().saveActiveBanker(bankers.first);
@@ -6383,7 +7568,7 @@ class _BankerDetailPageState extends ConsumerState<BankerDetailPage> {
               initials: initials,
               isBankerView: true,
               activeLabel: 'Banker View',
-              bankers: bankersAsync.value ?? [],
+              bankers: navbarBankers,
               activeBanker: activeBanker,
               onBankerSelected: (banker) {
                 ref.read(activeBankerProvider.notifier).state = banker;
@@ -6400,14 +7585,15 @@ class _BankerDetailPageState extends ConsumerState<BankerDetailPage> {
                 }
               },
             ),
-            NotificationsSection(
-              isBanker: true,
-              isDetailPage: true,
-              prospectName: prospect.name,
-              founderName: prospect.founderName,
-              bankerName: bankerName,
-              prospectsList: prospects,
-            ),
+            if (activeBanker?.bankerId != 'datascience')
+              NotificationsSection(
+                isBanker: true,
+                isDetailPage: true,
+                prospectName: prospect.name,
+                founderName: prospect.founderName,
+                bankerName: bankerName,
+                prospectsList: prospects,
+              ),
             Expanded(
               child: isMobile
                   ? SingleChildScrollView(
@@ -6425,28 +7611,30 @@ class _BankerDetailPageState extends ConsumerState<BankerDetailPage> {
                               },
                             ),
                           ),
-                          const Divider(height: 1, color: Color(0xFFE7DCC8)),
-                          SizedBox(
-                            height: 600,
-                            child: AiGuidePanel(
-                              prospectId: widget.prospectId,
-                              bankerId: activeBanker?.bankerId,
-                              founderName: prospect.name,
-                              companyName: prospect.name,
-                              industry: prospect.sector,
-                              stageLabel: prospect.stage,
-                              priorities: const [],
-                              customActionLabel: 'Prospect Chats',
-                              onCustomActionTap: () {},
-                              bankerName: bankerName,
-                              inDirectMessagingMode: _inDirectMessagingMode,
-                              onBackToNova: () {
-                                setState(() {
-                                  _inDirectMessagingMode = false;
-                                });
-                              },
+                          if (activeBanker?.bankerId != 'datascience') ...[
+                            const Divider(height: 1, color: Color(0xFFE7DCC8)),
+                            SizedBox(
+                              height: 600,
+                              child: AiGuidePanel(
+                                prospectId: widget.prospectId,
+                                bankerId: activeBanker?.bankerId,
+                                founderName: prospect.name,
+                                companyName: prospect.name,
+                                industry: prospect.sector,
+                                stageLabel: prospect.stage,
+                                priorities: const [],
+                                customActionLabel: 'Prospect Chats',
+                                onCustomActionTap: () {},
+                                bankerName: bankerName,
+                                inDirectMessagingMode: _inDirectMessagingMode,
+                                onBackToNova: () {
+                                  setState(() {
+                                    _inDirectMessagingMode = false;
+                                  });
+                                },
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                     )
@@ -6467,28 +7655,30 @@ class _BankerDetailPageState extends ConsumerState<BankerDetailPage> {
                             ),
                           ),
                         ),
-                        const VerticalDivider(width: 1, color: Color(0xFFE7DCC8)),
-                        SizedBox(
-                          width: 420,
-                          child: AiGuidePanel(
-                            prospectId: widget.prospectId,
-                            bankerId: activeBanker?.bankerId,
-                            founderName: prospect.name,
-                            companyName: prospect.name,
-                            industry: prospect.sector,
-                            stageLabel: prospect.stage,
-                            priorities: const [],
-                            customActionLabel: 'Prospect Chats',
-                            onCustomActionTap: () {},
-                            bankerName: bankerName,
-                            inDirectMessagingMode: _inDirectMessagingMode,
-                            onBackToNova: () {
-                              setState(() {
-                                _inDirectMessagingMode = false;
-                              });
-                            },
+                        if (activeBanker?.bankerId != 'datascience') ...[
+                          const VerticalDivider(width: 1, color: Color(0xFFE7DCC8)),
+                          SizedBox(
+                            width: 420,
+                            child: AiGuidePanel(
+                              prospectId: widget.prospectId,
+                              bankerId: activeBanker?.bankerId,
+                              founderName: prospect.name,
+                              companyName: prospect.name,
+                              industry: prospect.sector,
+                              stageLabel: prospect.stage,
+                              priorities: const [],
+                              customActionLabel: 'Prospect Chats',
+                              onCustomActionTap: () {},
+                              bankerName: bankerName,
+                              inDirectMessagingMode: _inDirectMessagingMode,
+                              onBackToNova: () {
+                                setState(() {
+                                  _inDirectMessagingMode = false;
+                                });
+                              },
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
             ),
@@ -6498,3 +7688,98 @@ class _BankerDetailPageState extends ConsumerState<BankerDetailPage> {
     );
   }
 }
+
+Widget _buildLeadBadge(String? lead) {
+  if (lead == null) return const Text('—', style: TextStyle(color: BankerColors.muted));
+  Color bg = const Color(0xFFF9FAFB);
+  Color fg = const Color(0xFF374151);
+  String icon = '';
+  if (lead.toLowerCase() == 'hot') {
+    bg = const Color(0xFFFEE2E2);
+    fg = const Color(0xFFDC2626);
+    icon = '🔥 ';
+  } else if (lead.toLowerCase() == 'warm') {
+    bg = const Color(0xFFFEF3C7);
+    fg = const Color(0xFFD97706);
+    icon = '🌤️ ';
+  } else if (lead.toLowerCase() == 'cold') {
+    bg = const Color(0xFFE0F2FE);
+    fg = const Color(0xFF0284C7);
+    icon = '❄️ ';
+  }
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: bg,
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Text(
+      '$icon$lead',
+      style: TextStyle(color: fg, fontSize: 11, fontWeight: FontWeight.bold),
+    ),
+  );
+}
+
+Widget _buildProbabilityCell(double? prob) {
+  if (prob == null) return const Text('—', style: TextStyle(color: BankerColors.muted));
+  final val = prob / 100.0;
+  Color barColor = BankerColors.blue;
+  if (prob >= 65) {
+    barColor = const Color(0xFFE0533C);
+  } else if (prob >= 35) {
+    barColor = BankerColors.gold;
+  } else {
+    barColor = BankerColors.blue;
+  }
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      Container(
+        height: 5,
+        width: 80,
+        decoration: BoxDecoration(color: BankerColors.cream, borderRadius: BorderRadius.circular(999)),
+        alignment: Alignment.centerLeft,
+        child: FractionallySizedBox(
+          widthFactor: val,
+          child: Container(
+            decoration: BoxDecoration(
+              color: barColor,
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(height: 3),
+      Text('${prob.toInt()}%*', style: const TextStyle(fontSize: 10, color: BankerColors.muted2, fontWeight: FontWeight.bold)),
+    ],
+  );
+}
+
+Widget _buildPriorityBadge(String? priority) {
+  if (priority == null) return const Text('—', style: TextStyle(color: BankerColors.muted));
+  Color bg = const Color(0xFFF3F4F6);
+  Color fg = const Color(0xFF4B5563);
+  if (priority.toLowerCase() == 'high') {
+    bg = const Color(0xFFFEE2E2);
+    fg = const Color(0xFFB91C1C);
+  } else if (priority.toLowerCase() == 'medium') {
+    bg = const Color(0xFFFEF3C7);
+    fg = const Color(0xFFB45309);
+  } else if (priority.toLowerCase() == 'low') {
+    bg = const Color(0xFFE5E7EB);
+    fg = const Color(0xFF374151);
+  }
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: bg,
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Text(
+      priority,
+      style: TextStyle(color: fg, fontSize: 11, fontWeight: FontWeight.bold),
+    ),
+  );
+}
+

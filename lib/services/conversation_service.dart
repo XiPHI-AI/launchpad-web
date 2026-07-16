@@ -59,6 +59,9 @@ class ProspectInitResult {
   final String? lastSeenAt;
   final Map<String, dynamic> aiAttributesHistorical;
   final String? bankId;
+  final String? leadTemperature;
+  final double? conversionProbability;
+  final String? salesPriority;
 
   ProspectInitResult({
     required this.prospectId,
@@ -83,6 +86,9 @@ class ProspectInitResult {
     this.lastSeenAt,
     this.aiAttributesHistorical = const {},
     this.bankId,
+    this.leadTemperature,
+    this.conversionProbability,
+    this.salesPriority,
   });
 
   Map<String, dynamic> toDynamicVariables({bool lockProfileFields = false}) {
@@ -684,6 +690,9 @@ class ConversationService {
       bankerName: data['banker_name'] as String?,
       bankerPosition: data['banker_position'] as String?,
       bankId: data['bank_id'] as String?,
+      leadTemperature: data['lead_temperature'] as String?,
+      conversionProbability: (data['conversion_probability'] as num?)?.toDouble(),
+      salesPriority: data['sales_priority'] as String?,
     );
   }
 
@@ -728,6 +737,9 @@ class ConversationService {
       bankerName: data['banker_name'] as String?,
       bankerPosition: data['banker_position'] as String?,
       bankId: data['bank_id'] as String?,
+      leadTemperature: data['lead_temperature'] as String?,
+      conversionProbability: (data['conversion_probability'] as num?)?.toDouble(),
+      salesPriority: data['sales_priority'] as String?,
     );
   }
 
@@ -768,6 +780,9 @@ class ConversationService {
       bankerName: data['banker_name'] as String?,
       bankerPosition: data['banker_position'] as String?,
       bankId: data['bank_id'] as String?,
+      leadTemperature: data['lead_temperature'] as String?,
+      conversionProbability: (data['conversion_probability'] as num?)?.toDouble(),
+      salesPriority: data['sales_priority'] as String?,
       classification: classificationData == null
           ? null
           : ProspectClassification(
@@ -1071,6 +1086,9 @@ class ConversationService {
         bankerPosition: data['banker_position'] as String?,
         lastSeenAt: data['last_seen_at'] as String?,
         bankId: data['bank_id'] as String?,
+        leadTemperature: data['lead_temperature'] as String?,
+        conversionProbability: (data['conversion_probability'] as num?)?.toDouble(),
+        salesPriority: data['sales_priority'] as String?,
         classification: classificationData == null
             ? null
             : ProspectClassification(
@@ -1336,6 +1354,56 @@ class ConversationService {
         .map((item) => DocumentAuditLog.fromJson(item as Map<String, dynamic>))
         .toList();
   }
+
+  Future<ProspectDataScienceDetails> getProspectDataScience(String prospectId) async {
+    final response = await _dio.get(
+      '${ApiConfig.baseUrl}/conversations/prospect/$prospectId/data-science',
+    );
+    return ProspectDataScienceDetails.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<dynamic> runProspectDataScience(String prospectId, {Map<String, dynamic>? features, bool simulation = false}) async {
+    final response = await _dio.post(
+      '${ApiConfig.baseUrl}/conversations/prospect/$prospectId/data-science/run',
+      data: {
+        'features': features ?? {},
+        'simulation': simulation,
+      },
+    );
+    final data = response.data as Map<String, dynamic>;
+    if (simulation) {
+      return ProspectDataScienceDetails.fromJson(data);
+    }
+    final result = ProspectInitResult(
+      prospectId: data['prospect_id'] as String,
+      stageBucket: data['stage_bucket'] as String,
+      agentDisplayName: data['agent_display_name'] as String? ?? 'your JPMC AI Advisor',
+      conversationPhase: data['conversation_phase'] as int? ?? 1,
+      isReturning: data['is_returning_user'] as bool? ?? true,
+      email: data['email'] as String?,
+      fullName: data['full_name'] as String?,
+      phoneNumber: data['phone_number'] as String?,
+      companyName: data['company_name'] as String?,
+      incorporated: data['incorporated'] as bool? ?? false,
+      companyStage: data['company_stage'] as String?,
+      industry: data['industry'] as String?,
+      headcount: data['headcount'] as String?,
+      selectedPrioritiesJson: (data['selected_priorities_json'] as Map?)?.map(
+            (key, value) => MapEntry(key.toString(), value == true),
+          ) ??
+          const {},
+      profileSnapshot: data['profile_snapshot'] as Map<String, dynamic>? ?? const {},
+      bankerId: data['banker_id'] as String?,
+      bankerName: data['banker_name'] as String?,
+      bankerPosition: data['banker_position'] as String?,
+      bankId: data['bank_id'] as String?,
+      leadTemperature: data['lead_temperature'] as String?,
+      conversionProbability: (data['conversion_probability'] as num?)?.toDouble(),
+      salesPriority: data['sales_priority'] as String?,
+    );
+    ProspectCache.set(prospectId, result);
+    return result;
+  }
 }
 
 
@@ -1354,6 +1422,45 @@ class ProspectCache {
 
   static void clear() {
     _cache.clear();
+  }
+}
+
+
+class ProspectDataScienceDetails {
+  final String prospectId;
+  final double conversionProbability;
+  final String leadTemperature;
+  final String salesPriority;
+  final bool isEngagementSchema;
+  final Map<String, dynamic> rawFeaturesJson;
+  final Map<String, dynamic> scoreBreakdownJson;
+  final List<dynamic> recommendedServicesJson;
+  final String updatedAt;
+
+  ProspectDataScienceDetails({
+    required this.prospectId,
+    required this.conversionProbability,
+    required this.leadTemperature,
+    required this.salesPriority,
+    required this.isEngagementSchema,
+    required this.rawFeaturesJson,
+    required this.scoreBreakdownJson,
+    required this.recommendedServicesJson,
+    required this.updatedAt,
+  });
+
+  factory ProspectDataScienceDetails.fromJson(Map<String, dynamic> json) {
+    return ProspectDataScienceDetails(
+      prospectId: json['prospect_id'] as String,
+      conversionProbability: (json['conversion_probability'] as num).toDouble(),
+      leadTemperature: json['lead_temperature'] as String,
+      salesPriority: json['sales_priority'] as String,
+      isEngagementSchema: json['is_engagement_schema'] as bool? ?? false,
+      rawFeaturesJson: json['raw_features_json'] as Map<String, dynamic>? ?? const {},
+      scoreBreakdownJson: json['score_breakdown_json'] as Map<String, dynamic>? ?? const {},
+      recommendedServicesJson: json['recommended_services_json'] as List? ?? const [],
+      updatedAt: json['updated_at'] as String,
+    );
   }
 }
 
