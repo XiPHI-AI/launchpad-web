@@ -11,6 +11,7 @@ import '../../services/notification_service.dart';
 import '../relationship_hub/relationship_hub_page.dart';
 import '../../core/branding/branding_provider.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'datascience_analytics_views.dart';
 
 // --- COLOR PALETTE FROM HTML ---
 class BankerColors {
@@ -3918,6 +3919,106 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
           ),
           const SizedBox(height: 24),
 
+          const Text(
+            'MODEL-RECOMMENDED BANKING SERVICES',
+            style: TextStyle(fontSize: 10, color: BankerColors.muted2, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+          ),
+          const SizedBox(height: 8),
+          if (recommendedServices.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: BankerColors.cream,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: BankerColors.line2),
+              ),
+              child: const Text('No recommended services for this stage.', style: TextStyle(fontSize: 11, color: BankerColors.muted2)),
+            )
+          else
+            Column(
+              children: recommendedServices.map((prod) {
+                final String name = prod['name'] ?? '';
+                final String reason = prod['reason'] ?? '';
+                final String priority = prod['priority'] ?? 'Low';
+                final String icon = prod['icon'] ?? '💼';
+                final String sme = prod['sme'] ?? '';
+                final String session = prod['session'] ?? '';
+
+                Color priBg = const Color(0xFFF3F4F6);
+                Color priFg = const Color(0xFF374151);
+                if (priority == 'High') {
+                  priBg = const Color(0xFFE1F5EE);
+                  priFg = BankerColors.green;
+                } else if (priority == 'Medium') {
+                  priBg = const Color(0xFFFAEEDA);
+                  priFg = const Color(0xFFD97706);
+                }
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border.all(color: BankerColors.line2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: BankerColors.cream,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(icon, style: const TextStyle(fontSize: 18)),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: BankerColors.navy)),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(color: priBg, borderRadius: BorderRadius.circular(4)),
+                                  child: Text('$priority Fit', style: TextStyle(color: priFg, fontSize: 9, fontWeight: FontWeight.bold)),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(reason, style: const TextStyle(fontSize: 10.5, color: BankerColors.muted, height: 1.3)),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                if (session.isNotEmpty) ...[
+                                  const Icon(Icons.forum_outlined, size: 10, color: BankerColors.muted2),
+                                  const SizedBox(width: 4),
+                                  Text(session, style: const TextStyle(fontSize: 9.5, color: BankerColors.muted2)),
+                                  const SizedBox(width: 12),
+                                ],
+                                if (sme.isNotEmpty) ...[
+                                  const Icon(Icons.person_outline, size: 10, color: BankerColors.muted2),
+                                  const SizedBox(width: 4),
+                                  Text('SME: $sme', style: const TextStyle(fontSize: 9.5, color: BankerColors.muted2)),
+                                ],
+                              ],
+                            )
+                          ],
+                        ),
+                      )
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          const SizedBox(height: 24),
+
           const SizedBox(height: 12),
 
           Row(
@@ -5058,6 +5159,11 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
   String _sortColumn = 'Company';
   bool _sortAscending = true;
 
+  // Data Science view sub-chips and summary state
+  String _activeDsViewChip = 'prospects'; // 'prospects', 'analytics', 'summary', 'models'
+  String _summarySearchQuery = '';
+  CrmProspect? _summaryTarget;
+
   // Active hover row
   int? _hoveredIndex;
 
@@ -5411,7 +5517,7 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
               Expanded(
                 child: Container(
                   color: Colors.white,
-                  child: _buildCrmTable(prospects),
+                  child: _buildDsViewContent(prospects),
                 ),
               ),
             ],
@@ -5667,34 +5773,51 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
           color: Colors.white,
           border: Border(bottom: BorderSide(color: BankerColors.line2, width: 1)),
         ),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Container(
-            width: 280,
-            height: 32,
-            decoration: BoxDecoration(
-              color: BankerColors.cream,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: BankerColors.line2),
+        child: Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 12,
+          runSpacing: 8,
+          children: [
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                _buildDsViewChip('📋 Prospects', 'prospects'),
+                _buildDsViewChip('📊 Analytics', 'analytics'),
+                _buildDsViewChip('🔍 Column Summary', 'summary'),
+                _buildDsViewChip('🏋️ Models', 'models'),
+              ],
             ),
-            child: TextField(
-              controller: _searchController,
-              onChanged: (val) {
-                setState(() {
-                  _searchQuery = val;
-                });
-              },
-              style: const TextStyle(fontSize: 12, color: BankerColors.ink),
-              decoration: const InputDecoration(
-                hintText: 'Search prospects…',
-                hintStyle: TextStyle(color: BankerColors.muted2, fontSize: 12),
-                prefixIcon: Icon(Icons.search, size: 16, color: BankerColors.muted2),
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: EdgeInsets.symmetric(vertical: 8),
+            if (_activeDsViewChip == 'prospects')
+              Container(
+                width: 200,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: BankerColors.cream,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: BankerColors.line2),
+                ),
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (val) {
+                    setState(() {
+                      _searchQuery = val;
+                    });
+                  },
+                  style: const TextStyle(fontSize: 11, color: BankerColors.ink),
+                  decoration: const InputDecoration(
+                    hintText: 'Search prospects…',
+                    hintStyle: TextStyle(color: BankerColors.muted2, fontSize: 11),
+                    prefixIcon: Icon(Icons.search, size: 14, color: BankerColors.muted2),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(vertical: 8),
+                  ),
+                ),
               ),
-            ),
-          ),
+          ],
         ),
       );
     }
@@ -5881,6 +6004,64 @@ class _BankerCrmPageState extends ConsumerState<BankerCrmPage> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildDsViewChip(String label, String chipKey) {
+    final isOn = _activeDsViewChip == chipKey;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _activeDsViewChip = chipKey;
+        });
+      },
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          decoration: BoxDecoration(
+            color: isOn ? BankerColors.navy : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isOn ? BankerColors.navy : const Color(0xFFE2E8F0),
+              width: 1,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: isOn ? FontWeight.bold : FontWeight.w500,
+              color: isOn ? Colors.white : const Color(0xFF4A5568),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDsViewContent(List<CrmProspect> prospects) {
+    final activeBanker = ref.watch(activeBankerProvider);
+    final isDs = activeBanker?.bankerId == 'datascience';
+    if (!isDs || _activeDsViewChip == 'prospects') {
+      return _buildCrmTable(prospects);
+    }
+    return buildDsViewContent(
+      context: context,
+      activeDsViewChip: _activeDsViewChip,
+      prospects: prospects,
+      searchQuery: _summarySearchQuery,
+      onSearchQueryChanged: (val) {
+        setState(() {
+          _summarySearchQuery = val;
+        });
+      },
+      summaryTarget: _summaryTarget,
+      onSummaryTargetSelected: (val) {
+        setState(() {
+          _summaryTarget = val;
+        });
+      },
     );
   }
 
