@@ -1023,6 +1023,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
   bool _runningDsScoring = false;
   Map<String, dynamic> _simulatedFeatures = {};
   bool _isSandboxDirty = false;
+  bool _isSimulationApplied = false;
 
   Future<void> _fetchFullProfile() async {
     if (!mounted) return;
@@ -1060,6 +1061,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
           _loadingDsDetails = false;
           _simulatedFeatures = Map<String, dynamic>.from(details.rawFeaturesJson);
           _isSandboxDirty = false;
+          _isSimulationApplied = false;
         });
       }
     } catch (e) {
@@ -1092,6 +1094,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
             _dsDetails = details;
             _simulatedFeatures = Map<String, dynamic>.from(details.rawFeaturesJson);
             _isSandboxDirty = false;
+            _isSimulationApplied = true;
             _runningDsScoring = false;
           });
         }
@@ -1106,6 +1109,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
             _dsDetails = details;
             _simulatedFeatures = Map<String, dynamic>.from(details.rawFeaturesJson);
             _isSandboxDirty = false;
+            _isSimulationApplied = false;
             _runningDsScoring = false;
           });
         }
@@ -3917,107 +3921,7 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
               ),
             ],
           ),
-          const SizedBox(height: 24),
 
-          const Text(
-            'MODEL-RECOMMENDED BANKING SERVICES',
-            style: TextStyle(fontSize: 10, color: BankerColors.muted2, fontWeight: FontWeight.bold, letterSpacing: 0.8),
-          ),
-          const SizedBox(height: 8),
-          if (recommendedServices.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: BankerColors.cream,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: BankerColors.line2),
-              ),
-              child: const Text('No recommended services for this stage.', style: TextStyle(fontSize: 11, color: BankerColors.muted2)),
-            )
-          else
-            Column(
-              children: recommendedServices.map((prod) {
-                final String name = prod['name'] ?? '';
-                final String reason = prod['reason'] ?? '';
-                final String priority = prod['priority'] ?? 'Low';
-                final String icon = prod['icon'] ?? '💼';
-                final String sme = prod['sme'] ?? '';
-                final String session = prod['session'] ?? '';
-
-                Color priBg = const Color(0xFFF3F4F6);
-                Color priFg = const Color(0xFF374151);
-                if (priority == 'High') {
-                  priBg = const Color(0xFFE1F5EE);
-                  priFg = BankerColors.green;
-                } else if (priority == 'Medium') {
-                  priBg = const Color(0xFFFAEEDA);
-                  priFg = const Color(0xFFD97706);
-                }
-
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    border: Border.all(color: BankerColors.line2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 32,
-                        height: 32,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: BankerColors.cream,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(icon, style: const TextStyle(fontSize: 18)),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: BankerColors.navy)),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(color: priBg, borderRadius: BorderRadius.circular(4)),
-                                  child: Text('$priority Fit', style: TextStyle(color: priFg, fontSize: 9, fontWeight: FontWeight.bold)),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text(reason, style: const TextStyle(fontSize: 10.5, color: BankerColors.muted, height: 1.3)),
-                            const SizedBox(height: 6),
-                            Row(
-                              children: [
-                                if (session.isNotEmpty) ...[
-                                  const Icon(Icons.forum_outlined, size: 10, color: BankerColors.muted2),
-                                  const SizedBox(width: 4),
-                                  Text(session, style: const TextStyle(fontSize: 9.5, color: BankerColors.muted2)),
-                                  const SizedBox(width: 12),
-                                ],
-                                if (sme.isNotEmpty) ...[
-                                  const Icon(Icons.person_outline, size: 10, color: BankerColors.muted2),
-                                  const SizedBox(width: 4),
-                                  Text('SME: $sme', style: const TextStyle(fontSize: 9.5, color: BankerColors.muted2)),
-                                ],
-                              ],
-                            )
-                          ],
-                        ),
-                      )
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-          const SizedBox(height: 24),
 
           const SizedBox(height: 12),
 
@@ -4031,17 +3935,17 @@ class _BankerDetailPanelState extends ConsumerState<BankerDetailPanel> {
               Row(
                 children: [
                   OutlinedButton(
-                    onPressed: _isSandboxDirty ? () => _runDsScoring(useSimulation: false) : null,
+                    onPressed: (_isSandboxDirty || _isSimulationApplied) ? () => _runDsScoring(useSimulation: false) : null,
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      side: BorderSide(color: _isSandboxDirty ? BankerColors.muted : BankerColors.muted.withOpacity(0.3)),
+                      side: BorderSide(color: (_isSandboxDirty || _isSimulationApplied) ? BankerColors.muted : BankerColors.muted.withOpacity(0.3)),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                     ),
                     child: Text(
                       'Reset Override',
                       style: TextStyle(
                         fontSize: 10,
-                        color: _isSandboxDirty ? BankerColors.muted : BankerColors.muted.withOpacity(0.3),
+                        color: (_isSandboxDirty || _isSimulationApplied) ? BankerColors.muted : BankerColors.muted.withOpacity(0.3),
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -7773,7 +7677,10 @@ class _BankerDetailPageState extends ConsumerState<BankerDetailPage> {
                 prospectName: prospect.name,
                 founderName: prospect.founderName,
                 bankerName: bankerName,
-                prospectsList: prospects,
+                prospectsList: prospects.where((p) {
+                  if (activeBanker == null) return true;
+                  return p.bankerId == activeBanker.bankerId;
+                }).toList(),
               ),
             Expanded(
               child: isMobile
